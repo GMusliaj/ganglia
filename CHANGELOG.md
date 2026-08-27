@@ -17,14 +17,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - MCP-first QMD semantic retrieval with an always-available plain-text search
   floor.
 - Private, excluded-by-default Codex session cataloging for temporal recall.
-- Offline interactive knowledge canvas with link, tag, and best-effort semantic
-  relationships.
+- Live localhost knowledge canvas with link, tag, best-effort semantic
+  relationships, and an explicit offline export mode.
 - Repository setup, linting, verification, and allowlisted shared-memory
   auto-commit tooling.
 - Apache License 2.0 licensing with project and third-party notices.
 
 ### Changed
 
+- Restored transparent graph hit targets, color-map swatches, and connection
+  menu styling after extracting the canvas UI sources.
+- Restored accessible keyboard node selection, visible focus states, responsive
+  side panels, touch-sized controls, and mobile-safe label placement.
+- Reworked canvas discovery around searchable result navigation, knowledge-type
+  filters, contextual guidance, explicit map controls, neighborhood emphasis,
+  and a focused detail workflow.
+- Removed generated navigation indexes from graph nodes while leaving them in
+  QMD and plain-text retrieval.
+- Fixed the graph background overlay intercepting pointer events, which blocked
+  real node clicks from opening the inspector.
+- Added the Brain logo as an inline favicon for live canvas responses and
+  offline exports.
+- Split the canvas presentation and interaction code into maintainable
+  `bin/canvas.html` and `bin/canvas.js` source files; `canvas.py` injects graph
+  data and runtime assets into that shell in memory.
+- Replaced the default `.tmp/brain-canvas.html` build with a stable localhost
+  server that automatically reloads for UI-source and QMD SQLite/WAL changes;
+  offline single-file generation now requires an explicit `--output` path.
 - Unified indexing and linting on one OKF-lite parser.
 - Documented the public source/build boundary separately from private knowledge
   and disposable runtime artifacts.
@@ -42,3 +61,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   commit-author identity metadata.
 - Kept personal, engagement-specific, episodic, generated, and machine-local
   state outside the public Git surface through explicit ignore rules.
+- Bound the live canvas to loopback by default so private all-scope graph data
+  is not exposed on the local network accidentally, and reject non-local Host
+  headers in that mode.

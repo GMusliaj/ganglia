@@ -150,18 +150,31 @@ retrieval and status tools, not index mutations. Do not use the CLI for normal
 
 ## Knowledge canvas
 
-Build an interactive, offline force-directed view of the shared Brain:
+Start the live force-directed view of the shared Brain:
 
 ```sh
 bin/canvas.py
 ```
 
-The canvas opens `.tmp/brain-canvas.html` with a collection/session library on
-the left, the graph in the center, and a persistent inspector on the right.
-Click a node to see its linked patterns, concepts, decisions, sessions, and
-tags grouped by kind. The map key explains the stable node colors and shapes as
-well as the three edge styles. Double-click a node or use the inspector link to
-open its source; drag, pan, zoom, search, filter, or fit the graph as needed.
+The canvas opens at `http://127.0.0.1:8765/`. It is a local web application, not
+a generated working file: tracked `bin/canvas.html` and `bin/canvas.js` are
+served directly, and the graph is rebuilt in memory from the local QMD index.
+The open page reloads automatically—normally within a second—when either UI
+source file or QMD's SQLite/WAL state changes.
+
+The interface has a
+collection/session library on the left, the graph in the center, and a
+persistent inspector on the right. Click a node to see linked knowledge grouped
+by kind; the map key explains the stable colors, shapes, and edge styles.
+Double-click a node or use the inspector link to open its source. Drag, pan,
+zoom, search, filter, or fit the graph as needed. Markdown and the QMD index
+remain canonical. Generated navigation files such as `MEMORY.md` and folder
+indexes stay searchable but are omitted from the graph so they do not
+masquerade as knowledge entries.
+
+The live server never invokes QMD directly. It only reflects state already
+present in the local index, so MCP remains the agent retrieval interface and
+Brain-owned maintenance remains the index update boundary.
 
 The default view remains shared-only. Use `--scope all` explicitly to include
 gitignored local knowledge and the private `codex-sessions` collection; recent
@@ -174,14 +187,25 @@ Useful variants:
 bin/canvas.py --no-open
 bin/canvas.py --dry-run
 bin/canvas.py --scope all
+bin/canvas.py --port 0
 bin/canvas.py --collection brain --semantic-threshold 0.65
 bin/canvas.py --all-collections --scope all
 ```
 
+For a deliberately frozen, offline single-file snapshot, opt into export and
+choose its location explicitly:
+
+```sh
+bin/canvas.py --output local/exports/brain-canvas.html --scope all
+```
+
+Exports can contain excerpts and machine-local source paths. Keep private or
+all-scope exports under ignored `local/` storage and never publish them.
+
 Run `npm install --prefix bin` once to install the pinned D3 asset. D3 is
-inlined into the output, so an existing canvas is fully offline. Semantic edges
-read QMD's internal SQLite vector layout best-effort; if that layout is missing
-or changes, link and tag edges still render.
+inlined into live responses and explicit exports, so the canvas does not depend
+on a CDN. Semantic edges read QMD's internal SQLite vector layout best-effort;
+if that layout is missing or changes, link and tag edges still render.
 
 ## Setup
 
@@ -205,5 +229,6 @@ stops before staging.
 
 Brain is released under the [Apache License 2.0](LICENSE), identified by the
 SPDX expression `Apache-2.0`. See [NOTICE](NOTICE) for project attribution and
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for D3.js terms. Generated
-canvas files embed the D3.js license notice alongside the inlined library.
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for D3.js terms. Live canvas
+responses and explicit exports embed the D3.js license notice alongside the
+inlined library.

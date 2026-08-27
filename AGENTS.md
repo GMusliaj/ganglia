@@ -9,8 +9,8 @@ bare clone without QMD, a model, a database, or a build step.
 
 Repository tooling may have narrowly scoped dependencies, but none may become a
 hard dependency of reading or text-searching the knowledge. In particular, QMD
-is an optional semantic accelerator and D3 is used only to generate the
-disposable canvas.
+is an optional semantic accelerator and D3 is used only to serve or explicitly
+export the canvas.
 
 Codex exposes Brain through the installed `remember` and `recall` skills. Treat
 them as the implementation of the user-facing `/remember` and `/recall`
@@ -148,10 +148,11 @@ reading or searching Brain. See
 
 ## Canvas contract
 
-`bin/canvas.py` renders the indexed Markdown as a clickable force-directed
-graph and writes the ignored `.tmp/brain-canvas.html`. The artifact is a
-disposable view, never a source of knowledge, and must not be written into a
-shared folder because it can contain excerpts and local paths.
+`bin/canvas.py` serves indexed Markdown as a clickable force-directed graph at a
+loopback-only URL. The tracked `bin/canvas.html` and `bin/canvas.js` files are
+the UI source; the server renders graph data in memory and live-reloads the open
+page when either source or QMD's SQLite/WAL state changes. It writes no runtime
+HTML by default.
 
 - The default canvas scope is the shared layer. Include `local/` only when the
   user explicitly requests `--scope all`.
@@ -159,6 +160,12 @@ shared folder because it can contain excerpts and local paths.
   collection. `bin/sync_codex_sessions.py` copies only session metadata and
   compact request excerpts into the ignored local catalog; never embed raw
   JSONL wholesale or commit transcript content.
+- Keep the default server bound to `127.0.0.1`. Binding to another interface is
+  an explicit operator choice because all-scope responses may contain private
+  excerpts and machine-local paths.
+- Offline HTML is an explicit `--output` export, not the development runtime.
+  Keep private or all-scope exports in ignored local storage and never publish
+  them.
 - Explicit Markdown links and registered tags are authoritative graph edges.
   Semantic edges read QMD's internal vector storage and are best-effort; a
   schema/decode mismatch must warn once and preserve link and tag edges.
@@ -167,9 +174,10 @@ shared folder because it can contain excerpts and local paths.
   Every color encoding must also have a shape or text legend.
 - D3 is the sole scoped browser dependency. Keep it pinned in
   `bin/package.json`, installed under ignored `bin/node_modules/`, and inlined
-  into the output so the generated canvas works offline.
-- After changing the canvas, run its unit tests, build with `--no-open`, and
-  inspect the generated interface in a browser when that surface is available.
+  into live responses and explicit exports so no CDN is required.
+- After changing the canvas, run its unit and live-server tests, start it with
+  `--no-open`, and inspect the live interface in a browser when that surface is
+  available.
 
 ## Remember contract
 

@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 """Render QMD-indexed Brain Markdown as an offline force-directed graph.
 
-    bin/canvas.py                         # build the shared graph and open it
+    bin/canvas.py                         # serve the shared graph with live reload
     bin/canvas.py --collection brain      # select a collection (repeatable)
     bin/canvas.py --all-collections       # every include-by-default collection
-    bin/canvas.py --scope all             # explicitly include local/operating docs
-    bin/canvas.py --no-open               # build without launching a browser
+    bin/canvas.py --scope all             # explicitly include private local knowledge
+    bin/canvas.py --no-open               # serve without launching a browser
+    bin/canvas.py --output canvas.html    # explicit offline single-file export
     bin/canvas.py --dry-run               # report counts without writing
 
 The default view contains the shared knowledge layer. Nodes are documents plus
@@ -13,15 +14,18 @@ small tag nodes. Independently togglable edges represent Markdown links and
 wikilinks, document-to-tag membership, and semantic similarity from QMD's own
 vector index.
 
-The generated HTML is a disposable local artifact. D3 is inlined so the output
-works offline; Markdown remains canonical; and semantic decoding degrades with
+The primary interface is a localhost application with automatic reload for UI
+source and QMD index changes. An explicit single-file export inlines D3 for
+offline use. Markdown remains canonical, and semantic decoding degrades with
 one warning when QMD's internal, undocumented vector storage changes shape.
 """
 
 from __future__ import annotations
 
 import argparse
+import base64
 import html
+import http.server
 import json
 import math
 import posixpath
@@ -29,7 +33,9 @@ import re
 import sqlite3
 import struct
 import sys
+import threading
 import webbrowser
+from datetime import datetime, timezone
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
 from pathlib import Path
@@ -84,6 +90,124 @@ class Edge:
     target: str
     kind: str
     score: float | None = None
+
+
+def file_signature(path: Path) -> tuple[int, int] | None:
+    try:
+        stat = path.stat()
+    except FileNotFoundError:
+        return None
+    return stat.st_mtime_ns, stat.st_size
+
+
+def is_local_host_header(value: str) -> bool:
+    host = value.strip().lower()
+    if host.startswith("["):
+        host = host[1:].split("]", 1)[0]
+    elif ":" in host:
+        host = host.rsplit(":", 1)[0]
+    return host.rstrip(".") in {"localhost", "127.0.0.1", "::1"}
+
+
+class CanvasState:
+    """Thread-safe graph state plus source/index change detection."""
+
+    def __init__(
+        self,
+        graph: dict[str, object],
+        d3_source: str,
+        watched_paths: list[Path],
+        rebuild,
+    ) -> None:
+        self._graph = graph
+        self._d3_source = d3_source
+        self._watched_paths = watched_paths
+        self._rebuild = rebuild
+        self._signatures = {path: file_signature(path) for path in watched_paths}
+        self._lock = threading.Lock()
+        self._version = 1
+        self._last_error = ""
+
+    def snapshot(self) -> tuple[dict[str, object], str, int]:
+        with self._lock:
+            return self._graph, self._d3_source, self._version
+
+    def refresh_if_changed(self) -> None:
+        signatures = {path: file_signature(path) for path in self._watched_paths}
+        changed = [path for path in self._watched_paths if signatures[path] != self._signatures[path]]
+        if not changed:
+            return
+        with self._lock:
+            graph = self._graph
+        database_changed = any(path.name.startswith("index.sqlite") for path in changed)
+        if database_changed:
+            try:
+                graph, warnings = self._rebuild()
+            except (sqlite3.Error, ValueError) as error:
+                message = str(error)
+                if message != self._last_error:
+                    print(f"canvas: live graph refresh failed: {error}", file=sys.stderr)
+                    self._last_error = message
+                return
+            self._last_error = ""
+            for warning in warnings:
+                print(f"canvas: warning: {warning}", file=sys.stderr)
+        with self._lock:
+            self._signatures = signatures
+            self._graph = graph
+            self._version += 1
+
+
+class CanvasServer(http.server.ThreadingHTTPServer):
+    daemon_threads = True
+    allow_reuse_address = True
+
+    def __init__(self, address: tuple[str, int], state: CanvasState) -> None:
+        self.state = state
+        self.require_local_host = address[0] in {"127.0.0.1", "::1", "localhost"}
+        super().__init__(address, CanvasRequestHandler)
+
+
+class CanvasRequestHandler(http.server.BaseHTTPRequestHandler):
+    server: CanvasServer
+
+    def do_GET(self) -> None:  # noqa: N802 - stdlib handler API
+        self._route(head_only=False)
+
+    def do_HEAD(self) -> None:  # noqa: N802 - stdlib handler API
+        self._route(head_only=True)
+
+    def _route(self, head_only: bool) -> None:
+        if self.server.require_local_host and not is_local_host_header(self.headers.get("Host", "")):
+            self._send(421, "text/plain; charset=utf-8", b"Misdirected request\n", head_only)
+            return
+        request_path = urlparse(self.path).path
+        if request_path in {"/", "/index.html"}:
+            graph, d3_source, version = self.server.state.snapshot()
+            payload = render_html(graph, d3_source, live_version=version).encode("utf-8")
+            self._send(200, "text/html; charset=utf-8", payload, head_only)
+            return
+        if request_path == "/api/version":
+            _, _, version = self.server.state.snapshot()
+            payload = json.dumps({"version": version}, separators=(",", ":")).encode("utf-8")
+            self._send(200, "application/json", payload, head_only)
+            return
+        self._send(404, "text/plain; charset=utf-8", b"Not found\n", head_only)
+
+    def _send(self, status: int, content_type: str, payload: bytes, head_only: bool) -> None:
+        self.send_response(status)
+        self.send_header("Content-Type", content_type)
+        self.send_header("Content-Length", str(len(payload)))
+        self.send_header("Cache-Control", "no-store")
+        self.send_header("X-Content-Type-Options", "nosniff")
+        self.send_header("Content-Security-Policy", "default-src 'self' 'unsafe-inline' data:; connect-src 'self'; img-src 'self' data:")
+        self.end_headers()
+        if not head_only:
+            self.wfile.write(payload)
+
+    def log_message(self, format: str, *args: object) -> None:
+        if self.command != "GET" or self.path not in {"/api/version"}:
+            super().log_message(format, *args)
 
 
 def default_database(root: Path) -> Path:
@@ -141,6 +265,18 @@ def in_scope(path: str, scope: str) -> bool:
     if normalized in ROOT_SHARED_FILES:
         return True
     return normalized.split("/", 1)[0] in SHARED_FOLDERS
+
+
+def is_canvas_content(path: str, is_session: bool = False) -> bool:
+    """Exclude generated navigation artifacts without changing QMD coverage."""
+    if is_session:
+        return True
+    normalized = path.lstrip("./")
+    top_level = normalized.split("/", 1)[0]
+    return (
+        top_level in SHARED_FOLDERS | {"local"}
+        and Path(normalized).name not in {"index.md", "_index.md", "MEMORY.local.md"}
+    )
 
 
 def collection_root(repository: Path, configured_path: str) -> Path:
@@ -220,6 +356,8 @@ def document_nodes(
             source_path = (base / path_text).resolve()
             metadata: dict[str, object] = {}
             is_session = collection.name == "codex-sessions" or source_path.suffix == ".jsonl"
+            if not is_canvas_content(path_text, is_session):
+                continue
             session_title = session_description = session_date = session_project = ""
             if source_path.is_file() and is_session and source_path.suffix == ".jsonl":
                 session_title, session_description, session_date, session_project = codex_session_metadata(source_path)
@@ -235,7 +373,7 @@ def document_nodes(
             nodes.append(
                 DocumentNode(
                     id=f"doc:{collection.name}:{path_text}",
-                    label=title,
+                    label=compact_title(title, 32),
                     kind="document",
                     category=category,
                     collection=collection.name,
@@ -448,6 +586,7 @@ def build_graph(
                 "collections": [item.name for item in collections],
                 "scope": scope,
                 "semanticThreshold": semantic_threshold,
+                "generatedAt": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             },
         },
         warnings,
@@ -565,14 +704,42 @@ def render_library(graph: dict[str, object]) -> str:
     labels = {"brain": "Knowledge", "codex-sessions": "Codex sessions"}
     collection_rows = [
         '<button class="library-row is-active" type="button" data-collection="all" aria-pressed="true">'
-        f'<span>All knowledge</span><small>{len(documents)}</small></button>'
+        f'<span>All documents</span><small>{len(documents)}</small></button>'
     ]
-    for name, count in sorted(collections.items()):
-        collection_rows.append(
-            '<button class="library-row" type="button" '
-            f'data-collection="{html.escape(name)}" aria-pressed="false">'
-            f'<span>{html.escape(labels.get(name, name))}</span><small>{count}</small></button>'
+    if len(collections) > 1:
+        for name, count in sorted(collections.items()):
+            collection_rows.append(
+                '<button class="library-row" type="button" '
+                f'data-collection="{html.escape(name)}" aria-pressed="false">'
+                f'<span>{html.escape(labels.get(name, name))}</span><small>{count}</small></button>'
+            )
+    category_labels = {
+        "pattern": "Patterns",
+        "concept": "Concepts",
+        "decision": "Decisions",
+        "lesson": "Lessons",
+        "snippet": "Snippets",
+        "source": "Sources",
+        "infra": "Infrastructure",
+        "local": "Local knowledge",
+        "note": "Notes",
+    }
+    category_counts = Counter(
+        str(node.get("category", "source"))
+        for node in documents
+        if not node.get("is_session")
+    )
+    category_rows = [
+        '<button class="library-row" type="button" '
+        f'data-category="{html.escape(category)}" aria-pressed="false">'
+        f'<span><i class="category-dot {html.escape(category)}"></i>'
+        f'{html.escape(category_labels.get(category, category.title()))}</span>'
+        f'<small>{count}</small></button>'
+        for category, count in sorted(
+            category_counts.items(),
+            key=lambda item: (list(category_labels).index(item[0]) if item[0] in category_labels else 99, item[0]),
         )
+    ]
     if sessions:
         session_rows = []
         for node in sessions:
@@ -590,123 +757,61 @@ def render_library(graph: dict[str, object]) -> str:
         sessions_html = "".join(session_rows)
     else:
         sessions_html = (
-            '<p class="library-empty">Private sessions are available when the canvas is built with '
-            '<code>--scope all</code>.</p>'
+            '<p class="library-empty"><strong>Session history is private.</strong>'
+            '<span>Use an all-scope canvas when you want to browse recent work here.</span></p>'
         )
     return (
         '<nav class="library" id="library" aria-label="Knowledge library">'
-        '<div class="panel-heading"><div><h2>Library</h2><p>Collections and recent work</p></div></div>'
+        '<div class="panel-heading"><div><h2>Explore</h2><p>Browse knowledge and recent work</p></div></div>'
         '<div class="library-scroll">'
-        '<section class="library-section"><h3>Collections</h3>'
+        '<section class="library-section"><h3>Library</h3>'
         + "".join(collection_rows)
+        + '</section><section class="library-section"><h3>Knowledge types</h3>'
+        + "".join(category_rows)
         + '</section><section class="library-section sessions"><h3>Sessions</h3>'
         + sessions_html
         + '</section></div></nav>'
     )
 
 
-def render_html(graph: dict[str, object], d3_source: str) -> str:
-    data = json.dumps(graph, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
+def render_html(
+    graph: dict[str, object],
+    d3_source: str,
+    live_version: int | None = None,
+) -> str:
     static_graph = render_static_svg(graph)
     library = render_library(graph)
     nodes = graph["nodes"]
     links = graph["links"]
     meta = graph["meta"]
     assert isinstance(nodes, list) and isinstance(links, list) and isinstance(meta, dict)
+    render_meta = dict(meta)
+    if live_version is not None:
+        render_meta["liveReload"] = {"version": live_version, "url": "/api/version"}
+    render_graph = {**graph, "meta": render_meta}
+    data = json.dumps(render_graph, ensure_ascii=False, separators=(",", ":")).replace("</", "<\\/")
     document_count = sum(node["kind"] == "document" for node in nodes)
     tag_count = sum(node["kind"] == "tag" for node in nodes)
     scope_label = f'{meta.get("scope", "shared")} · {", ".join(meta.get("collections", []))}'
     initial_status = f"{document_count} documents · {tag_count} tags · {len(links)} visible edges"
-    template = r'''<!doctype html>
-<html lang="en">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Brain canvas</title>
-<style>
-:root{color-scheme:light dark;--background:#f5f6f7;--surface:#fff;--surface-raised:#fff;--foreground:#182026;--muted-foreground:#5f6b73;--border:#d5dbde;--control-hover:#edf1f2;--primary:#0f766e;--primary-soft:#dcefeb;--pattern:#0f766e;--concept:#2563a6;--decision:#a16207;--session:#7651a8;--source:#64748b;--tag:#687783;--semantic:#9a6b22;--shadow:0 14px 36px rgba(28,39,45,.14)}
-@media(prefers-color-scheme:dark){:root{--background:#101416;--surface:#151a1d;--surface-raised:#1b2124;--foreground:#edf1f2;--muted-foreground:#a9b3b8;--border:#3a454b;--control-hover:#222a2e;--primary:#5fc4b7;--primary-soft:#173d39;--pattern:#5fc4b7;--concept:#78aee8;--decision:#d2a65c;--session:#b79add;--source:#a1adb3;--tag:#a1adb3;--semantic:#d2a65c;--shadow:0 18px 44px rgba(0,0,0,.34)}}
-*{box-sizing:border-box}[hidden]{display:none!important}html,body{min-width:320px;min-height:100%;overflow:hidden}body{margin:0;background:var(--background);color:var(--foreground);font:14px/1.5 ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}button,input,summary{font:inherit}button,input{color:inherit}button{cursor:pointer}.shell{height:100dvh;display:grid;grid-template-rows:auto minmax(0,1fr)}
-.topbar{min-height:64px;display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--border);background:var(--surface);position:relative;z-index:40}.identity{display:flex;align-items:center;gap:10px;min-width:max-content;margin-right:auto}.identity-mark{width:26px;height:26px;color:var(--primary)}.identity h1{margin:0;font-size:15px;line-height:1.2;font-weight:500}.identity p{margin:2px 0 0;color:var(--muted-foreground);font-size:12px}.toolbar{display:flex;align-items:center;justify-content:flex-end;gap:8px}.search-wrap{position:relative}.search-icon{position:absolute;left:12px;top:50%;width:16px;height:16px;transform:translateY(-50%);color:var(--muted-foreground);pointer-events:none}.search{width:min(28vw,320px);min-width:220px;height:40px;padding:0 34px 0 38px;border:1px solid var(--border);border-radius:8px;background:var(--surface);outline:none}.search::placeholder{color:var(--muted-foreground)}.search::-webkit-search-cancel-button{display:none}.search-clear{position:absolute;right:4px;top:4px;width:32px;height:32px;border:0;border-radius:6px;background:transparent;color:var(--muted-foreground);font-size:18px}.search-clear:hover{background:var(--control-hover);color:var(--foreground)}
-.button,.connection-menu summary,.open-link{min-height:40px;display:inline-flex;align-items:center;justify-content:center;gap:7px;padding:0 12px;border:1px solid var(--border);border-radius:8px;background:var(--surface);color:var(--foreground);text-decoration:none;font-weight:500;transition:background-color 160ms ease,border-color 160ms ease}.button:hover,.connection-menu summary:hover,.open-link:hover{background:var(--control-hover)}.button svg,.connection-menu summary svg,.open-link svg{width:16px;height:16px;flex:none}.button.icon-only{width:40px;padding:0}.button:focus-visible,.search:focus-visible,.search-clear:focus-visible,.connection-menu summary:focus-visible,.open-link:focus-visible,.library-row:focus-visible,.session-row:focus-visible,.relation-row:focus-visible{outline:3px solid var(--primary);outline-offset:2px}.mobile-details{display:none}
-.connection-menu{position:relative}.connection-menu summary{list-style:none;cursor:pointer;user-select:none}.connection-menu summary::-webkit-details-marker{display:none}.connection-menu[open] summary{background:var(--control-hover);border-color:var(--primary)}.menu-panel{position:absolute;right:0;top:48px;width:246px;padding:8px;border:1px solid var(--border);border-radius:10px;background:var(--surface-raised);box-shadow:var(--shadow);z-index:50}.layer-control{min-height:44px;display:grid;grid-template-columns:20px 1fr auto;align-items:center;gap:10px;padding:7px 8px;border-radius:7px;cursor:pointer}.layer-control:hover{background:var(--control-hover)}.layer-control input{width:16px;height:16px;margin:0;accent-color:var(--primary)}.layer-control span{display:block}.layer-control small{display:block;color:var(--muted-foreground);font-size:11px}.edge-sample{width:20px;height:0;border-top:2px solid var(--tag)}.edge-sample.tag{border-top-style:dotted;border-top-color:var(--primary)}.edge-sample.semantic{border-top-style:dashed;border-top-color:var(--semantic)}
-.workspace{position:relative;min-height:0;display:grid;grid-template-columns:276px minmax(0,1fr) 320px;transition:grid-template-columns 220ms cubic-bezier(.2,.8,.2,1)}.workspace.library-collapsed{grid-template-columns:0 minmax(0,1fr) 320px}.library,.inspector-panel{min-width:0;background:var(--surface);overflow:hidden}.library{border-right:1px solid var(--border);transition:opacity 160ms ease,transform 220ms cubic-bezier(.2,.8,.2,1)}.workspace.library-collapsed .library{opacity:0;transform:translateX(-20px);pointer-events:none}.inspector-panel{border-left:1px solid var(--border);display:flex;flex-direction:column}.panel-heading{min-height:65px;display:flex;align-items:center;justify-content:space-between;padding:14px 18px;border-bottom:1px solid var(--border)}.panel-heading h2{margin:0;font-size:14px;font-weight:500}.panel-heading p{margin:2px 0 0;color:var(--muted-foreground);font-size:12px}.library-scroll,.inspector-scroll{overflow-y:auto;overscroll-behavior:contain}.library-scroll{height:calc(100% - 65px);padding:14px 10px 28px}.library-section{margin-bottom:22px}.library-section h3,.inspector-section h3{margin:0 8px 8px;color:var(--muted-foreground);font-size:11px;font-weight:500;text-transform:uppercase;letter-spacing:.08em}.library-row,.session-row,.relation-row{width:100%;border:0;background:transparent;color:var(--foreground);text-align:left;border-radius:7px;transition:background-color 140ms ease,color 140ms ease}.library-row{min-height:38px;display:flex;align-items:center;justify-content:space-between;padding:7px 9px}.library-row small{color:var(--muted-foreground);font-variant-numeric:tabular-nums}.library-row:hover,.session-row:hover,.relation-row:hover{background:var(--control-hover)}.library-row.is-active{background:var(--primary-soft);color:var(--foreground)}.session-row{display:block;padding:8px 9px;margin-bottom:2px}.session-row span{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.session-row small{display:block;margin-top:2px;color:var(--muted-foreground);font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.session-row.search-hidden{display:none}.library-empty{margin:8px;padding:10px;color:var(--muted-foreground);font-size:12px;background:var(--control-hover);border-radius:7px}.library-empty code{color:var(--foreground)}
-.graph-wrap{position:relative;min-width:0;overflow:hidden;background:var(--background);isolation:isolate}.graph-wrap::before{content:"";position:absolute;inset:0;pointer-events:none;background-image:radial-gradient(var(--border) .7px,transparent .7px);background-size:22px 22px;opacity:.32}#graph{position:relative;z-index:1;display:block;width:100%;height:100%;min-height:520px;touch-action:none}.edge{stroke:var(--tag);stroke-width:1;opacity:.34}.edge.tag{stroke:var(--primary);stroke-dasharray:2 5;opacity:.3}.edge.semantic{stroke:var(--semantic);stroke-dasharray:8 7;opacity:.27}.node{cursor:grab;outline:none;transition:opacity 150ms ease}.node:active{cursor:grabbing}.node .hit-area{fill:transparent;stroke:none;pointer-events:all}.node path{stroke:var(--background);stroke-width:2;transition:stroke-width 150ms ease,filter 150ms ease}.node text,.static-node text{fill:var(--foreground);font-size:12px;font-weight:500;paint-order:stroke;stroke:var(--background);stroke-width:5px;stroke-linejoin:round;pointer-events:none}.node text{opacity:0;transition:opacity 140ms ease}.node.prominent text,.node:hover text,.node:focus text,.node.selected text,.node.match text{opacity:1}.node.dimmed{opacity:.1}.node.filtered{display:none}.node.match path{stroke:var(--foreground);stroke-width:3}.node.selected path,.node:focus-visible path{stroke:var(--foreground);stroke-width:4;filter:drop-shadow(0 3px 5px rgba(0,0,0,.16))}.static-node circle,.static-node rect,.static-node path{stroke:var(--background);stroke-width:2}.static-empty{fill:var(--muted-foreground)}.status{position:absolute;z-index:5;left:18px;bottom:16px;display:flex;align-items:center;gap:8px;color:var(--muted-foreground);font-size:12px;pointer-events:none}.status::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--primary)}
-.inspector-scroll{padding:18px;height:100%}.inspector-empty{color:var(--muted-foreground);padding:4px 0 18px}.detail-content{opacity:0;transform:translateY(6px);visibility:hidden;height:0;overflow:hidden;transition:opacity 180ms ease,transform 220ms cubic-bezier(.2,.8,.2,1)}.detail-content.is-visible{opacity:1;transform:none;visibility:visible;height:auto;overflow:visible}.detail-kind{margin:0 0 6px;color:var(--muted-foreground);font-size:11px;text-transform:uppercase;letter-spacing:.08em}.detail-content h2{margin:0;font-size:18px;line-height:1.35;font-weight:500;overflow-wrap:anywhere}.detail-description{margin:10px 0;color:var(--muted-foreground)}.detail-path{margin:8px 0;color:var(--muted-foreground);font:11px/1.45 ui-monospace,SFMono-Regular,Menlo,monospace;overflow-wrap:anywhere}.detail-meta{display:flex;gap:6px;flex-wrap:wrap;margin:12px 0}.badge{padding:3px 7px;border-radius:999px;background:var(--control-hover);color:var(--muted-foreground);font-size:11px}.open-link{margin-top:2px}.inspector-section{padding-top:18px;margin-top:18px;border-top:1px solid var(--border)}.inspector-section h3{margin-left:0}.relation-group{margin-top:12px}.relation-group h4{margin:0 0 5px;color:var(--muted-foreground);font-size:12px;font-weight:500}.relation-row{display:grid;grid-template-columns:8px minmax(0,1fr) auto;align-items:center;gap:8px;min-height:36px;padding:6px 7px}.relation-dot,.legend-mark{display:inline-block;background:var(--source)}.relation-row span:nth-child(2){overflow:hidden;text-overflow:ellipsis;white-space:nowrap}.relation-row small{color:var(--muted-foreground);font-size:10px}.relations-empty{color:var(--muted-foreground);font-size:12px}.legend-list{display:grid;gap:9px}.legend-item{display:grid;grid-template-columns:18px 1fr;align-items:center;gap:9px;color:var(--muted-foreground);font-size:12px}.legend-mark{width:10px;height:10px;border-radius:50%;justify-self:center}.legend-mark.session{border-radius:3px}.legend-mark.tag{transform:rotate(45deg);border-radius:1px}.legend-line{width:18px;height:0;border-top:2px solid var(--tag)}.legend-line.tag-edge{border-top-style:dotted;border-top-color:var(--primary)}.legend-line.semantic{border-top-style:dashed;border-top-color:var(--semantic)}.pattern{background:var(--pattern)}.concept{background:var(--concept)}.decision{background:var(--decision)}.session{background:var(--session)}.source{background:var(--source)}.tag{background:var(--tag)}.static-node.pattern circle{fill:var(--pattern)}.static-node.concept circle{fill:var(--concept)}.static-node.decision circle{fill:var(--decision)}.static-node.session rect{fill:var(--session)}.static-node.tag path{fill:var(--tag)}.sidebar-scrim{display:none}.sr-only{position:absolute!important;width:1px!important;height:1px!important;padding:0!important;margin:-1px!important;overflow:hidden!important;clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important}
-@media(max-width:1120px){.workspace{grid-template-columns:236px minmax(0,1fr) 286px}.workspace.library-collapsed{grid-template-columns:0 minmax(0,1fr) 286px}.identity p{display:none}.search{width:min(28vw,270px)}}
-@media(max-width:820px){html,body{overflow:auto}.shell{min-height:100dvh;height:auto;grid-template-rows:auto minmax(600px,1fr)}.topbar{align-items:flex-start;flex-wrap:wrap;padding:10px 12px}.identity{margin-right:auto}.toolbar{order:2;width:100%;justify-content:stretch}.search-wrap{flex:1;min-width:0}.search{width:100%;min-width:0;font-size:16px}.connection-menu summary .button-label{display:none}.connection-menu summary{width:40px;padding:0}.menu-panel{right:-48px}.mobile-details{display:inline-flex}.workspace,.workspace.library-collapsed{min-height:600px;grid-template-columns:1fr}.library,.inspector-panel{position:absolute;top:0;bottom:0;width:min(88vw,320px);z-index:30;box-shadow:var(--shadow);transition:transform 220ms cubic-bezier(.2,.8,.2,1),opacity 180ms ease}.library{left:0;transform:translateX(-105%);opacity:0}.inspector-panel{right:0;transform:translateX(105%);opacity:0}.workspace.library-open .library,.workspace.inspector-open .inspector-panel{transform:none;opacity:1}.workspace.library-collapsed .library{transform:translateX(-105%)}.sidebar-scrim{position:absolute;inset:0;z-index:25;border:0;background:rgba(8,12,14,.34)}.workspace.library-open .sidebar-scrim,.workspace.inspector-open .sidebar-scrim{display:block}.node.prominent text{opacity:0}.node.selected text,.node:focus text,.node.match text{opacity:1}.status{left:12px;bottom:12px}}
-@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition-duration:.01ms!important;animation-duration:.01ms!important}}
-</style>
-</head>
-<body>
-<main class="shell">
-  <header class="topbar">
-    <button class="button icon-only" id="library-toggle" type="button" aria-label="Toggle library" aria-controls="library" aria-expanded="true"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 5h16M4 12h16M4 19h16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button>
-    <div class="identity"><svg class="identity-mark" viewBox="0 0 28 28" aria-hidden="true"><circle cx="7" cy="14" r="3" fill="currentColor"/><circle cx="21" cy="7" r="3" fill="currentColor"/><circle cx="21" cy="21" r="3" fill="currentColor"/><path d="M9.5 12.8 18.3 8.2M9.5 15.2l8.8 4.6" fill="none" stroke="currentColor" stroke-width="1.5"/></svg><div><h1>Knowledge map</h1><p id="scope-label">__SCOPE_LABEL__</p></div></div>
-    <div class="toolbar" aria-label="Canvas controls">
-      <div class="search-wrap"><label class="sr-only" for="search">Search titles, paths, tags, and sessions</label><svg class="search-icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="m16 16 4 4" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><input class="search" id="search" type="search" placeholder="Search knowledge and sessions" autocomplete="off"><button class="search-clear" id="search-clear" type="button" aria-label="Clear search" hidden>&times;</button></div>
-      <details class="connection-menu" id="connection-menu"><summary><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M6 14v6" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg><span class="button-label">Connections</span></summary><div class="menu-panel" aria-label="Visible connection types"><label class="layer-control"><input id="layer-link" type="checkbox" checked><span>Markdown links<small>Explicit references</small></span><i class="edge-sample"></i></label><label class="layer-control"><input id="layer-tag" type="checkbox" checked><span>Tag membership<small>Shared taxonomy</small></span><i class="edge-sample tag"></i></label><label class="layer-control"><input id="layer-semantic" type="checkbox" checked><span>Semantic similarity<small>Best-effort QMD layer</small></span><i class="edge-sample semantic"></i></label></div></details>
-      <button class="button icon-only" id="fit" type="button" aria-label="Fit graph to view"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
-      <button class="button icon-only mobile-details" id="details-toggle" type="button" aria-label="Show node details" aria-controls="inspector" aria-expanded="false"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="1.7"/><path d="M12 11v6M12 7.5v.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg></button>
-    </div>
-  </header>
-  <div class="workspace" id="workspace">
-    __LIBRARY__
-    <section class="graph-wrap" aria-label="Interactive Brain knowledge graph"><svg id="graph" viewBox="0 0 1200 760" role="img" aria-labelledby="graph-title graph-desc"><title id="graph-title">Brain knowledge graph</title><desc id="graph-desc">Circles are durable knowledge, rounded squares are Codex sessions, and diamonds are tags. Select a node to inspect linked knowledge.</desc>__STATIC_GRAPH__</svg><div class="status" id="counts" role="status" aria-live="polite">__INITIAL_STATUS__</div></section>
-    <aside class="inspector-panel" id="inspector" aria-label="Node details"><div class="panel-heading"><div><h2>Inspector</h2><p>Selection and relationships</p></div></div><div class="inspector-scroll"><p class="inspector-empty" id="inspector-empty">Select a node to inspect its linked patterns, concepts, decisions, tags, and sessions.</p><div class="detail-content" id="detail-content" aria-live="polite"><p class="detail-kind" id="detail-kind"></p><h2 id="detail-title"></h2><p class="detail-description" id="detail-description"></p><p class="detail-path" id="detail-path"></p><div class="detail-meta" id="detail-tags"></div><a class="open-link" id="detail-open" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M14 5h5v5M19 5l-8 8M18 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/></svg><span>Open source</span></a><section class="inspector-section"><h3>Linked knowledge</h3><div id="relations"></div></section></div><section class="inspector-section"><h3>Map key</h3><div class="legend-list"><div class="legend-item"><i class="legend-mark pattern"></i><span>Pattern</span></div><div class="legend-item"><i class="legend-mark concept"></i><span>Concept</span></div><div class="legend-item"><i class="legend-mark decision"></i><span>Decision</span></div><div class="legend-item"><i class="legend-mark session"></i><span>Codex session</span></div><div class="legend-item"><i class="legend-mark tag"></i><span>Tag</span></div><div class="legend-item"><i class="legend-line"></i><span>Markdown link</span></div><div class="legend-item"><i class="legend-line tag-edge"></i><span>Tag membership</span></div><div class="legend-item"><i class="legend-line semantic"></i><span>Semantic similarity</span></div></div></section></div></aside>
-    <button class="sidebar-scrim" id="sidebar-scrim" type="button" aria-label="Close side panel"></button>
-  </div>
-</main>
-<script>__D3_SOURCE__</script>
-<script>
-const graph=__GRAPH_DATA__,workspace=document.getElementById("workspace");
-const svg=d3.select("#graph"),element=svg.node(),nodes=graph.nodes.map(d=>({...d})),allLinks=graph.links.map(d=>({...d})),nodeById=new Map(nodes.map(d=>[d.id,d]));
-svg.select("#static-graph").remove();
-const wrap=element.parentElement,zoomRoot=svg.append("g"),linkLayer=zoomRoot.append("g"),nodeLayer=zoomRoot.append("g"),motionReduced=matchMedia("(prefers-reduced-motion: reduce)");
-const endpointId=value=>typeof value==="object"?value.id:value;
-const degree=new Map(nodes.map(d=>[d.id,0]));allLinks.forEach(d=>{degree.set(endpointId(d.source),(degree.get(endpointId(d.source))||0)+1);degree.set(endpointId(d.target),(degree.get(endpointId(d.target))||0)+1)});
-const prominentList=[...nodes].filter(d=>d.kind==="document"&&!d.is_session).sort((a,b)=>(degree.get(b.id)||0)-(degree.get(a.id)||0)).slice(0,5),prominent=new Set(prominentList.map(d=>d.id)),labelLeft=new Set(prominentList.filter((_,i)=>i%2).map(d=>d.id));
-const colorMap={pattern:"var(--pattern)",concept:"var(--concept)",decision:"var(--decision)",session:"var(--session)",source:"var(--source)",tag:"var(--tag)"};
-let visibleNodes=[...nodes],visibleIds=new Set(nodes.map(d=>d.id)),activeLinks=[],activeCollection="all",selectedNode=null,resizeFrame=0,initialFitPending=true;
-function compactGraph(){return wrap.clientWidth<600}function chargeStrength(d){return compactGraph()?(d.kind==="tag"?-48:-88):(d.kind==="tag"?-72:-155)}function collisionRadius(d){return compactGraph()?(d.kind==="tag"?20:27):(d.kind==="tag"?30:40)}function linkDistance(d){return compactGraph()?(d.kind==="tag"?62:d.kind==="semantic"?92:78):(d.kind==="tag"?96:d.kind==="semantic"?142:116)}
-const simulation=d3.forceSimulation(nodes).randomSource(d3.randomLcg(.417)).alphaDecay(.038).velocityDecay(.42).force("charge",d3.forceManyBody().strength(chargeStrength)).force("center",d3.forceCenter()).force("x",d3.forceX().strength(.035)).force("y",d3.forceY().strength(.035)).force("collision",d3.forceCollide().radius(collisionRadius));
-let linkSelection,nodeSelection;
-function fillFor(d){return colorMap[d.is_session?"session":d.category]||colorMap.source}function symbol(d){const base=d.kind==="tag"?90:170,weight=Math.min(180,(degree.get(d.id)||0)*18),type=d.kind==="tag"?d3.symbolDiamond:d.is_session?d3.symbolSquare:d3.symbolCircle;return d3.symbol().type(type).size(base+weight)()}
-nodeSelection=nodeLayer.selectAll("g").data(nodes,d=>d.id).join("g").attr("class",d=>`node ${d.kind} ${d.category} ${prominent.has(d.id)?"prominent":""}`).attr("role","button").attr("tabindex",0).attr("aria-label",d=>`${d.title}, ${d.category}`).call(d3.drag().on("start",dragStart).on("drag",dragged).on("end",dragEnd));
-nodeSelection.append("circle").attr("class","hit-area").attr("r",22);nodeSelection.append("path").attr("d",symbol).attr("fill",fillFor);nodeSelection.append("text").attr("x",d=>labelLeft.has(d.id)?-14:14).attr("y",4).attr("text-anchor",d=>labelLeft.has(d.id)?"end":"start").text(d=>d.label);
-nodeSelection.on("click",(_,d)=>selectNode(d,true)).on("focus",(_,d)=>selectNode(d,false)).on("keydown",(event,d)=>{if(event.key==="Enter"||event.key===" "){event.preventDefault();selectNode(d,true)}}).on("dblclick",(_,d)=>{if(d.url)location.href=d.url});
-simulation.on("tick",()=>{linkSelection?.attr("x1",d=>d.source.x).attr("y1",d=>d.source.y).attr("x2",d=>d.target.x).attr("y2",d=>d.target.y);nodeSelection.attr("transform",d=>`translate(${d.x},${d.y})`)}).on("end",()=>{if(initialFitPending&&!selectedNode){initialFitPending=false;fit()}});
-const zoom=d3.zoom().scaleExtent([.18,4]).on("zoom",event=>zoomRoot.attr("transform",event.transform));svg.call(zoom);
-function size(){const width=wrap.clientWidth,height=element.clientHeight;svg.attr("viewBox",[0,0,width,height]);simulation.force("center",d3.forceCenter(width/2,height/2));simulation.force("x").x(width/2);simulation.force("y").y(height/2);simulation.force("charge").strength(chargeStrength);simulation.force("collision").radius(collisionRadius);const force=simulation.force("link");if(force)force.distance(linkDistance)}
-function enabled(kind){return document.getElementById(`layer-${kind}`).checked}function edgeVisible(d){return visibleIds.has(endpointId(d.source))&&visibleIds.has(endpointId(d.target))}
-function updateLinks(){activeLinks=allLinks.filter(d=>enabled(d.kind)&&edgeVisible(d));linkSelection=linkLayer.selectAll("line").data(activeLinks,d=>`${endpointId(d.source)}|${endpointId(d.target)}|${d.kind}`).join("line").attr("class",d=>`edge ${d.kind}`).attr("aria-label",d=>d.kind==="semantic"?`Semantic similarity ${Math.round((d.score||0)*100)} percent`:d.kind);simulation.force("link",d3.forceLink(activeLinks).id(d=>d.id).distance(linkDistance).strength(d=>d.kind==="semantic"?.1:.24));simulation.alpha(.72).restart();updateCounts()}
-function setCollection(name,shouldFit=true){activeCollection=name;const docs=nodes.filter(d=>d.kind==="document"&&(name==="all"||d.collection===name)),ids=new Set(docs.map(d=>d.id));allLinks.filter(d=>d.kind==="tag"&&(ids.has(endpointId(d.source))||ids.has(endpointId(d.target)))).forEach(d=>{ids.add(endpointId(d.source));ids.add(endpointId(d.target))});visibleNodes=nodes.filter(d=>ids.has(d.id));visibleIds=new Set(visibleNodes.map(d=>d.id));nodeSelection.classed("filtered",d=>!visibleIds.has(d.id));simulation.nodes(visibleNodes);document.querySelectorAll("[data-collection]").forEach(button=>{const active=button.dataset.collection===name;button.classList.toggle("is-active",active);button.setAttribute("aria-pressed",String(active))});if(selectedNode&&!visibleIds.has(selectedNode.id))clearSelection();updateLinks();if(shouldFit)setTimeout(fit,360)}
-function fit(){const positioned=visibleNodes.filter(d=>Number.isFinite(d.x)&&Number.isFinite(d.y)),width=wrap.clientWidth,height=element.clientHeight;if(!positioned.length)return;const xs=positioned.map(d=>d.x),ys=positioned.map(d=>d.y),padding=compactGraph()?24:44,minX=Math.min(...xs),maxX=Math.max(...xs),minY=Math.min(...ys),maxY=Math.max(...ys),boundsWidth=Math.max(1,maxX-minX+padding*2),boundsHeight=Math.max(1,maxY-minY+padding*2),maxScale=compactGraph()?2.6:1.9,scale=Math.min(maxScale,.84/Math.max(boundsWidth/width,boundsHeight/height)),transform=d3.zoomIdentity.translate(width/2,height/2).scale(scale).translate(-(minX+maxX)/2,-(minY+maxY)/2);if(motionReduced.matches)svg.call(zoom.transform,transform);else svg.transition().duration(320).ease(d3.easeCubicOut).call(zoom.transform,transform)}
-function focusNode(d){if(!Number.isFinite(d.x)||!Number.isFinite(d.y))return;const current=d3.zoomTransform(element),scale=Math.max(1.15,Math.min(2,current.k));const transform=d3.zoomIdentity.translate(wrap.clientWidth/2,element.clientHeight/2).scale(scale).translate(-d.x,-d.y);if(motionReduced.matches)svg.call(zoom.transform,transform);else svg.transition().duration(300).ease(d3.easeCubicOut).call(zoom.transform,transform)}
-function relationNodes(d){const related=new Map(),precedence={link:3,tag:2,semantic:1};for(const link of allLinks){const source=endpointId(link.source),target=endpointId(link.target);if(source!==d.id&&target!==d.id)continue;const other=nodeById.get(source===d.id?target:source);if(!other)continue;const current=related.get(other.id)||{node:other,kinds:new Set(),score:0,priority:0};current.kinds.add(link.kind);current.score=Math.max(current.score,link.score||0);current.priority=Math.max(current.priority,precedence[link.kind]||0);related.set(other.id,current)}return [...related.values()].map(item=>({...item,kind:[...item.kinds].sort((a,b)=>(precedence[b]||0)-(precedence[a]||0)).join(" · ")})).sort((a,b)=>(b.priority-a.priority)||(b.score-a.score)||a.node.title.localeCompare(b.node.title))}
-function groupLabel(node){if(node.is_session)return "Sessions";if(node.kind==="tag")return "Tags";return {pattern:"Patterns",concept:"Concepts",decision:"Decisions",lesson:"Lessons",snippet:"Snippets",source:"Sources",infra:"Infrastructure"}[node.category]||"Related knowledge"}
-function renderRelations(d){const container=document.getElementById("relations"),relations=relationNodes(d);container.replaceChildren();if(!relations.length){const empty=document.createElement("p");empty.className="relations-empty";empty.textContent="No indexed relationships for this node yet.";container.append(empty);return}const groups=new Map(),order=["Patterns","Concepts","Decisions","Lessons","Sessions","Snippets","Sources","Infrastructure","Related knowledge","Tags"];relations.forEach(item=>{const key=groupLabel(item.node);if(!groups.has(key))groups.set(key,[]);groups.get(key).push(item)});for(const [label,items] of [...groups].sort((a,b)=>(order.indexOf(a[0])<0?99:order.indexOf(a[0]))-(order.indexOf(b[0])<0?99:order.indexOf(b[0])))){const group=document.createElement("div");group.className="relation-group";const heading=document.createElement("h4");heading.textContent=`${label} · ${items.length}`;group.append(heading);for(const item of items.slice(0,8)){const button=document.createElement("button");button.type="button";button.className="relation-row";button.setAttribute("aria-label",`Focus ${item.node.title}, connected by ${item.kind}`);const dot=document.createElement("i");dot.className=`relation-dot ${item.node.is_session?"session":item.node.category}`;const title=document.createElement("span");title.textContent=item.node.title;const kind=document.createElement("small");kind.textContent=item.kind;button.append(dot,title,kind);button.addEventListener("click",()=>{if(!visibleIds.has(item.node.id))setCollection("all",false);selectNode(item.node,true)});group.append(button)}container.append(group)}}
-function selectNode(d,focus){selectedNode=d;nodeSelection.classed("selected",n=>n.id===d.id);document.getElementById("inspector-empty").hidden=true;const content=document.getElementById("detail-content");content.classList.add("is-visible");document.getElementById("detail-kind").textContent=d.is_session?"Codex session":d.category;document.getElementById("detail-title").textContent=d.title;document.getElementById("detail-description").textContent=d.description||`${d.category} node`;document.getElementById("detail-path").textContent=d.path||"";const tags=document.getElementById("detail-tags"),items=[...(d.tags||[])];if(d.project)items.unshift(d.project);if(d.date)items.unshift(d.date.slice(0,16).replace("T"," · "));tags.replaceChildren(...items.map(value=>{const span=document.createElement("span");span.className="badge";span.textContent=value;return span}));const open=document.getElementById("detail-open");open.hidden=!d.url;if(d.url)open.href=d.url;renderRelations(d);document.querySelector(".inspector-scroll").scrollTo({top:0,behavior:motionReduced.matches?"auto":"smooth"});if(focus)focusNode(d);if(innerWidth<=820)openPanel("inspector")}
-function clearSelection(){selectedNode=null;nodeSelection.classed("selected",false);document.getElementById("inspector-empty").hidden=false;document.getElementById("detail-content").classList.remove("is-visible")}
-function updateCounts(){document.getElementById("counts").textContent=`${visibleNodes.filter(d=>d.kind==="document").length} documents · ${visibleNodes.filter(d=>d.kind==="tag").length} tags · ${activeLinks.length} visible edges`}
-function dragStart(event,d){if(!event.active)simulation.alphaTarget(.18).restart();d.fx=d.x;d.fy=d.y}function dragged(event,d){d.fx=event.x;d.fy=event.y}function dragEnd(event,d){if(!event.active)simulation.alphaTarget(0);d.fx=null;d.fy=null}
-function search(query){const normalized=query.trim().toLowerCase(),matches=d=>`${d.title} ${d.path} ${d.project||""} ${(d.tags||[]).join(" ")}`.toLowerCase().includes(normalized);nodeSelection.classed("dimmed",d=>normalized&&!matches(d)).classed("match",d=>normalized&&matches(d));document.querySelectorAll(".session-row").forEach(button=>button.classList.toggle("search-hidden",Boolean(normalized)&&!matches(nodeById.get(button.dataset.nodeId))));document.getElementById("search-clear").hidden=!normalized}
-function openPanel(panel){workspace.classList.remove("library-open","inspector-open");if(panel)workspace.classList.add(`${panel}-open`);document.getElementById("details-toggle").setAttribute("aria-expanded",String(panel==="inspector"))}
-document.querySelectorAll('input[id^="layer-"]').forEach(input=>input.addEventListener("change",updateLinks));document.querySelectorAll("[data-collection]").forEach(button=>button.addEventListener("click",()=>setCollection(button.dataset.collection)));document.querySelectorAll("[data-node-id]").forEach(button=>button.addEventListener("click",()=>{setCollection("all",false);const node=nodeById.get(button.dataset.nodeId);if(node)selectNode(node,true)}));
-document.getElementById("fit").addEventListener("click",fit);document.getElementById("library-toggle").addEventListener("click",()=>{if(innerWidth<=820){openPanel(workspace.classList.contains("library-open")?null:"library");return}workspace.classList.toggle("library-collapsed");document.getElementById("library-toggle").setAttribute("aria-expanded",String(!workspace.classList.contains("library-collapsed")))});document.getElementById("details-toggle").addEventListener("click",()=>openPanel(workspace.classList.contains("inspector-open")?null:"inspector"));document.getElementById("sidebar-scrim").addEventListener("click",()=>openPanel(null));document.getElementById("search").addEventListener("input",event=>search(event.target.value));document.getElementById("search-clear").addEventListener("click",()=>{const input=document.getElementById("search");input.value="";search("");input.focus()});document.addEventListener("pointerdown",event=>{const menu=document.getElementById("connection-menu");if(menu.open&&!menu.contains(event.target))menu.open=false});document.addEventListener("keydown",event=>{if(event.key==="Escape"){document.getElementById("connection-menu").open=false;openPanel(null);clearSelection()}});
-document.getElementById("scope-label").textContent=`${graph.meta.scope} · ${(graph.meta.collections||[]).join(", ")}`;
-new ResizeObserver(()=>{cancelAnimationFrame(resizeFrame);resizeFrame=requestAnimationFrame(()=>{size();simulation.alpha(.16).restart()})}).observe(wrap);size();setCollection("all",false);setTimeout(fit,850);
-</script>
-</body>
-</html>'''
+    # Keep the UI maintainable in dedicated source files; Python only injects
+    # the graph data and inlined runtime assets into those templates.
+    template_path = Path(__file__).with_name("canvas.html")
+    script_path = Path(__file__).with_name("canvas.js")
+    logo_path = Path(__file__).parents[1] / "docs" / "assets" / "brain-logo.svg"
+    template = template_path.read_text(encoding="utf-8")
+    script = script_path.read_text(encoding="utf-8").replace("__GRAPH_DATA__", data)
+    favicon = base64.b64encode(logo_path.read_bytes()).decode("ascii")
     return (
         template.replace("__LIBRARY__", library)
         .replace("__STATIC_GRAPH__", static_graph)
         .replace("__D3_SOURCE__", d3_source)
-        .replace("__GRAPH_DATA__", data)
+        .replace("__CANVAS_JS__", script)
+        .replace("__FAVICON__", favicon)
         .replace("__SCOPE_LABEL__", html.escape(scope_label))
         .replace("__INITIAL_STATUS__", html.escape(initial_status))
     )
+
 
 
 def main() -> int:
@@ -715,20 +820,27 @@ def main() -> int:
     selection = parser.add_mutually_exclusive_group()
     selection.add_argument("--collection", action="append", default=[], help="QMD collection to graph; repeatable")
     selection.add_argument("--all-collections", action="store_true", help="Graph every include-by-default collection")
-    parser.add_argument("--scope", choices=("shared", "all"), default="shared", help="Default excludes local and operating files")
+    parser.add_argument("--scope", choices=("shared", "all"), default="shared", help="Default excludes private local knowledge")
     parser.add_argument("--database", type=Path, default=default_database(repository), help="QMD SQLite index")
-    parser.add_argument("--output", type=Path, default=repository / ".tmp" / "brain-canvas.html")
+    parser.add_argument("--output", type=Path, help="Export one offline HTML file instead of starting the live server")
     parser.add_argument("--no-semantic", action="store_true", help="Skip QMD vector similarity edges")
     parser.add_argument("--semantic-threshold", type=float, default=0.55)
     parser.add_argument("--semantic-neighbors", type=int, default=2)
-    parser.add_argument("--no-open", action="store_true", help="Build without opening a browser")
-    parser.add_argument("--dry-run", action="store_true", help="Print graph counts without writing or opening")
+    parser.add_argument("--host", default="127.0.0.1", help="Live server bind address (default: loopback only)")
+    parser.add_argument("--port", type=int, default=8765, help="Live server port (default: 8765; use 0 for any free port)")
+    parser.add_argument("--poll-interval", "--watch", dest="poll_interval", type=float, default=0.75, metavar="SECONDS", help="UI/QMD change detection interval (default: 0.75)")
+    parser.add_argument("--no-open", action="store_true", help="Do not launch the live URL or exported file")
+    parser.add_argument("--dry-run", action="store_true", help="Print graph counts without serving or exporting")
     args = parser.parse_args()
 
     if not 0 <= args.semantic_threshold <= 1:
         parser.error("--semantic-threshold must be between 0 and 1")
     if args.semantic_neighbors < 1:
         parser.error("--semantic-neighbors must be at least 1")
+    if args.poll_interval < 0.25:
+        parser.error("--poll-interval must be at least 0.25 seconds")
+    if not 0 <= args.port <= 65535:
+        parser.error("--port must be between 0 and 65535")
     database = args.database.expanduser().resolve()
     if not database.is_file():
         parser.error(f"QMD index not found: {database}; run scripts/qmd.sh update")
@@ -763,12 +875,59 @@ def main() -> int:
         return 1
     d3_license = d3_license_path.read_text(encoding="utf-8").strip()
     d3_source = f"/*\nD3.js license\n\n{d3_license}\n*/\n{d3_path.read_text(encoding='utf-8')}"
-    output = args.output.expanduser().resolve()
-    output.parent.mkdir(parents=True, exist_ok=True)
-    output.write_text(render_html(graph, d3_source), encoding="utf-8")
-    print(f"wrote {output}")
+    if args.output is not None:
+        output = args.output.expanduser().resolve()
+        output.parent.mkdir(parents=True, exist_ok=True)
+        temporary_output = output.with_suffix(f"{output.suffix}.tmp")
+        temporary_output.write_text(render_html(graph, d3_source), encoding="utf-8")
+        temporary_output.replace(output)
+        print(f"exported {output}")
+        if not args.no_open:
+            webbrowser.open(output.as_uri())
+        return 0
+
+    def rebuild() -> tuple[dict[str, object], list[str]]:
+        return build_graph(
+            repository,
+            database,
+            args.collection,
+            args.all_collections,
+            args.scope,
+            not args.no_semantic,
+            args.semantic_threshold,
+            args.semantic_neighbors,
+        )
+
+    database_sidecars = [Path(f"{database}{suffix}") for suffix in ("-wal", "-shm")]
+    state = CanvasState(
+        graph,
+        d3_source,
+        [Path(__file__).with_name("canvas.html"), Path(__file__).with_name("canvas.js"), database, *database_sidecars],
+        rebuild,
+    )
+    server = CanvasServer((args.host, args.port), state)
+    bound_host, bound_port = server.server_address[:2]
+    browser_host = "127.0.0.1" if bound_host in {"0.0.0.0", "::"} else bound_host
+    url = f"http://{browser_host}:{bound_port}/"
+    stop_watcher = threading.Event()
+
+    def watch() -> None:
+        while not stop_watcher.wait(args.poll_interval):
+            state.refresh_if_changed()
+
+    watcher = threading.Thread(target=watch, name="brain-canvas-watch", daemon=True)
+    watcher.start()
+    print(f"serving live canvas at {url}")
+    print("watching UI source and QMD index changes (Ctrl-C to stop)")
     if not args.no_open:
-        webbrowser.open(output.as_uri())
+        webbrowser.open(url)
+    try:
+        server.serve_forever(poll_interval=0.2)
+    except KeyboardInterrupt:
+        print("\ncanvas: stopped")
+    finally:
+        stop_watcher.set()
+        server.server_close()
     return 0
 
 

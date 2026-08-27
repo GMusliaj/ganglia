@@ -246,6 +246,21 @@ class LintTests(unittest.TestCase):
 
 
 class CanvasTests(unittest.TestCase):
+    def test_live_server_accepts_only_local_host_headers_in_loopback_mode(self):
+        for value in ("localhost:8765", "localhost.", "127.0.0.1:8765", "[::1]:8765"):
+            self.assertTrue(canvas_module.is_local_host_header(value))
+        self.assertFalse(canvas_module.is_local_host_header("example.invalid:8765"))
+
+    def test_canvas_omits_generated_navigation_but_keeps_sessions(self):
+        self.assertFalse(canvas_module.is_canvas_content("MEMORY.md"))
+        self.assertFalse(canvas_module.is_canvas_content("concepts/index.md"))
+        self.assertFalse(canvas_module.is_canvas_content("local/projects/example/_index.md"))
+        self.assertFalse(canvas_module.is_canvas_content("local/MEMORY.local.md"))
+        self.assertFalse(canvas_module.is_canvas_content("README.md"))
+        self.assertTrue(canvas_module.is_canvas_content("concepts/retrieval.md"))
+        self.assertTrue(canvas_module.is_canvas_content("local/notes/retrieval.md"))
+        self.assertTrue(canvas_module.is_canvas_content("session.jsonl", is_session=True))
+
     def test_normalizes_relative_markdown_and_wikilinks(self):
         self.assertEqual(
             canvas_module.normalize_target(
@@ -310,11 +325,36 @@ class CanvasTests(unittest.TestCase):
         self.assertIn('id="relations"', rendered)
         self.assertIn("Linked knowledge", rendered)
         self.assertIn("Map key", rendered)
+        self.assertIn('id="search-results"', rendered)
+        self.assertIn('id="zoom-in"', rendered)
+        self.assertIn('id="zoom-out"', rendered)
+        self.assertIn('data-category="pattern"', rendered)
         self.assertIn('placeholder="Search knowledge and sessions"', rendered)
         self.assertIn("prefers-reduced-motion:reduce", rendered)
+        self.assertIn("pointer-events: none", rendered)
+        self.assertIn('event.key === "Enter"', rendered)
+        self.assertIn('role="status" aria-live="polite"', rendered)
         self.assertIn("1 documents · 0 tags · 0 visible edges", rendered)
         self.assertIn("window.d3 = {};", rendered)
         self.assertNotIn("<script src=", rendered)
+        self.assertNotIn('"liveReload"', rendered)
+
+        live = canvas_module.render_html(graph, "window.d3 = {};", live_version=7)
+        self.assertIn('"liveReload":{"version":7,"url":"/api/version"}', live)
+
+    def test_live_state_version_changes_when_a_watched_source_changes(self):
+        graph = {"nodes": [], "links": [], "meta": {"collections": ["brain"], "scope": "shared"}}
+        with tempfile.TemporaryDirectory() as temporary:
+            watched = Path(temporary) / "canvas.js"
+            watched.write_text("initial")
+            state = canvas_module.CanvasState(graph, "window.d3 = {};", [watched], lambda: (graph, []))
+            _, _, initial_version = state.snapshot()
+            watched.write_text("changed")
+            state.refresh_if_changed()
+            _, _, changed_version = state.snapshot()
+
+            self.assertEqual(initial_version, 1)
+            self.assertEqual(changed_version, 2)
 
     def test_render_preserves_inlined_d3_license_notice(self):
         graph = {"nodes": [], "links": [], "meta": {"collections": [], "scope": "shared"}}
