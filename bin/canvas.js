@@ -122,7 +122,10 @@ nodeSelection
       selectNode(node, false);
     }
   })
-  .on("dblclick", (_, node) => { if (node.url) location.href = node.url; })
+  .on("dblclick", (_, node) => {
+    const destination = node.editor_url || node.url;
+    if (destination) location.href = destination;
+  })
   .on("pointerenter", showTooltip)
   .on("pointermove", moveTooltip)
   .on("pointerleave", hideTooltip);
@@ -400,9 +403,14 @@ function selectNode(node, focus) {
     badge.textContent = value;
     return badge;
   }));
+  const editor = document.getElementById("detail-editor");
+  editor.hidden = !node.editor_url;
+  if (node.editor_url) editor.href = node.editor_url;
+  else editor.removeAttribute("href");
   const open = document.getElementById("detail-open");
   open.hidden = !node.url;
   if (node.url) open.href = node.url;
+  else open.removeAttribute("href");
   renderRelations(node);
   document.querySelector(".inspector-scroll").scrollTo({ top: 0, behavior: motionReduced.matches ? "auto" : "smooth" });
   if (focus) focusNode(node);

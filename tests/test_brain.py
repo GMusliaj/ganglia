@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import re
 import sys
 import tempfile
 import unittest
@@ -307,6 +308,7 @@ class CanvasTests(unittest.TestCase):
                     "description": "Example entry.",
                     "tags": [],
                     "url": "",
+                    "editor_url": "",
                     "date": "2026-08-27",
                     "project": "",
                     "is_session": False,
@@ -323,6 +325,8 @@ class CanvasTests(unittest.TestCase):
         self.assertIn('id="layer-semantic"', rendered)
         self.assertIn('id="inspector" aria-label="Node details"', rendered)
         self.assertIn('id="relations"', rendered)
+        self.assertIn('id="detail-editor"', rendered)
+        self.assertIn("Open in VS Code", rendered)
         self.assertIn("Linked knowledge", rendered)
         self.assertIn("Map key", rendered)
         self.assertIn('id="search-results"', rendered)
@@ -334,6 +338,9 @@ class CanvasTests(unittest.TestCase):
         self.assertIn("pointer-events: none", rendered)
         self.assertIn('event.key === "Enter"', rendered)
         self.assertIn('role="status" aria-live="polite"', rendered)
+        self.assertIn('class="identity-logo"', rendered)
+        self.assertIn("Double link brackets surround one durable knowledge unit", rendered)
+        self.assertNotIn("__BRAIN_LOGO__", rendered)
         self.assertIn("1 documents · 0 tags · 0 visible edges", rendered)
         self.assertIn("window.d3 = {};", rendered)
         self.assertNotIn("<script src=", rendered)
@@ -341,6 +348,24 @@ class CanvasTests(unittest.TestCase):
 
         live = canvas_module.render_html(graph, "window.d3 = {};", live_version=7)
         self.assertIn('"liveReload":{"version":7,"url":"/api/version"}', live)
+
+    def test_vscode_url_uses_the_documented_file_scheme_and_escapes_spaces(self):
+        path = ROOT / "concepts" / "example note.md"
+
+        self.assertEqual(
+            canvas_module.vscode_url(path),
+            f"vscode://file{path.as_posix().replace(' ', '%20')}",
+        )
+
+    def test_canvas_interactive_icons_use_the_shared_icon_contract(self):
+        template = (ROOT / "bin" / "canvas.html").read_text(encoding="utf-8")
+        interactive_icons = re.findall(
+            r'<(?:button|summary|a)\b[^>]*>\s*<svg\b([^>]*)>', template
+        )
+
+        self.assertGreaterEqual(len(interactive_icons), 12)
+        for attributes in interactive_icons:
+            self.assertIn('class="ui-icon"', attributes)
 
     def test_live_state_version_changes_when_a_watched_source_changes(self):
         graph = {"nodes": [], "links": [], "meta": {"collections": ["brain"], "scope": "shared"}}

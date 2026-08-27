@@ -30,6 +30,8 @@ htmlcov/
 .claude/
 .idea/
 .vscode/
+tasks.md
+spec/
 .DS_Store
 *.swp
 *.swo

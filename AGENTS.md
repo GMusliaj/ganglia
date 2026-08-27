@@ -28,7 +28,7 @@ scripts/refresh-qmd.sh        best-effort local QMD index maintenance; not a ret
 scripts/install-qmd-mcp.sh    configure the Codex-facing brain-qmd MCP server
 bin/reindex.py                regenerate shared, folder, and local navigation indexes
 bin/lint_brain.py             read-only validation of the shared OKF-lite contract
-bin/canvas.py                 build and optionally open the disposable knowledge graph
+bin/canvas.py                 serve the live knowledge graph or explicitly export a snapshot
 bin/sync_codex_sessions.py    build the private, compact session catalog used by QMD and canvas
 scripts/verify.sh             run repository tests, guards, reindexing, lint, and shell validation
 ```

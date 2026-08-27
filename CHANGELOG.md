@@ -25,6 +25,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Excluded local task and specification artifacts from version control.
+- Refactored the canvas header around a responsive Brain-and-Canvas identity,
+  centered search, quieter controls, and a clearer desktop/mobile hierarchy.
+- Standardized every canvas control on one reusable outline-icon system and
+  added a contract test to prevent mixed interactive icon styles returning.
+- Made VS Code the canvas's primary source action through its documented file
+  URL handler while retaining a default-application fallback.
 - Restored transparent graph hit targets, color-map swatches, and connection
   menu styling after extracting the canvas UI sources.
 - Restored accessible keyboard node selection, visible focus states, responsive

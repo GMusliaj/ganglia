@@ -39,7 +39,7 @@ from datetime import datetime, timezone
 from collections import Counter, defaultdict
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from urllib.parse import unquote, urlparse
+from urllib.parse import quote, unquote, urlparse
 
 from okf import parse
 
@@ -78,6 +78,7 @@ class DocumentNode:
     description: str
     tags: list[str]
     url: str
+    editor_url: str
     date: str
     project: str
     is_session: bool
@@ -107,6 +108,12 @@ def is_local_host_header(value: str) -> bool:
     elif ":" in host:
         host = host.rsplit(":", 1)[0]
     return host.rstrip(".") in {"localhost", "127.0.0.1", "::1"}
+
+
+def vscode_url(path: Path) -> str:
+    """Return VS Code's documented platform URL for an absolute file path."""
+    resolved = path.resolve().as_posix()
+    return f"vscode://file{quote(resolved, safe='/:')}"
 
 
 class CanvasState:
@@ -370,6 +377,7 @@ def document_nodes(
             description = session_description or str(metadata.get("description") or "")
             date = session_date or str(metadata.get("timestamp") or metadata.get("date") or "")
             project = session_project or str(metadata.get("project") or "")
+            source_exists = source_path.exists()
             nodes.append(
                 DocumentNode(
                     id=f"doc:{collection.name}:{path_text}",
@@ -381,7 +389,8 @@ def document_nodes(
                     title=title,
                     description=description,
                     tags=tags,
-                    url=source_path.as_uri() if source_path.exists() else "",
+                    url=source_path.as_uri() if source_exists else "",
+                    editor_url=vscode_url(source_path) if source_exists else "",
                     date=date,
                     project=project,
                     is_session=is_session,

@@ -166,10 +166,12 @@ The interface has a
 collection/session library on the left, the graph in the center, and a
 persistent inspector on the right. Click a node to see linked knowledge grouped
 by kind; the map key explains the stable colors, shapes, and edge styles.
-Double-click a node or use the inspector link to open its source. Drag, pan,
-zoom, search, filter, or fit the graph as needed. Markdown and the QMD index
-remain canonical. Generated navigation files such as `MEMORY.md` and folder
-indexes stay searchable but are omitted from the graph so they do not
+Double-click a node or use the inspector's primary action to open its source in
+VS Code through the editor's registered `vscode://file/` URL handler. The
+secondary **Open file** action preserves a default-application fallback. Drag,
+pan, zoom, search, filter, or fit the graph as needed. Markdown and the QMD
+index remain canonical. Generated navigation files such as `MEMORY.md` and
+folder indexes stay searchable but are omitted from the graph so they do not
 masquerade as knowledge entries.
 
 The live server never invokes QMD directly. It only reflects state already
