@@ -86,11 +86,12 @@ decisions, concepts, incomplete investigations, one-off actions, or checkpoints
 into scripts.
 
 For a qualifying operation, read and follow
-[artifact-materialization.md](artifact-materialization.md). The initial tracer
-supports safe, read-only Python command-line artifacts. If the operation needs
-another language, external mutation, or an update to an existing bundle, keep
-the durable knowledge as prose and state that materialization is not supported
-yet; do not improvise an unvalidated artifact path.
+[artifact-materialization.md](artifact-materialization.md). The tracer supports
+Python, JavaScript, and Bash command-line artifacts, including safe preview
+defaults for mutating operations and content-bound updates of an authoritative
+existing bundle. If the operation needs another language or cannot expose a
+non-destructive default, keep the durable knowledge as prose; do not improvise
+an unvalidated artifact path.
 
 ## 5. Write OKF-lite
 

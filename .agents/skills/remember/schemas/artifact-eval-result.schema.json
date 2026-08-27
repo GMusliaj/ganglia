@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.invalid/brain/artifact-eval-result.schema.json",
+  "title": "Brain artifact evaluation result",
+  "type": "object",
+  "required": ["schema_version", "kind", "status", "total", "passed", "failed", "cases"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "kind": {"type": "string", "const": "artifact-eval-result"},
+    "status": {"type": "string", "enum": ["passed", "failed"]},
+    "total": {"type": "integer", "minimum": 0},
+    "passed": {"type": "integer", "minimum": 0},
+    "failed": {"type": "integer", "minimum": 0},
+    "cases": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "category", "expected_behavior", "actual_behavior", "passed", "reason"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+          "category": {"type": "string", "minLength": 1},
+          "expected_behavior": {"type": "string", "minLength": 1},
+          "actual_behavior": {"type": "string", "minLength": 1},
+          "passed": {"type": "boolean"},
+          "reason": {"type": "string", "minLength": 1}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

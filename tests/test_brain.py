@@ -44,6 +44,9 @@ approval_module = load_module(
     "brain_record_artifact_approval",
     ROOT / "scripts" / "record_artifact_approval.py",
 )
+artifact_eval_module = load_module(
+    "brain_eval_artifacts", ROOT / "scripts" / "eval_artifacts.py"
+)
 canvas_module = load_module("brain_canvas", ROOT / "bin" / "canvas.py")
 session_module = load_module(
     "brain_session_catalog", ROOT / "bin" / "sync_codex_sessions.py"
@@ -84,6 +87,18 @@ if __name__ == "__main__":
     main()
 """
 
+SHELL_ARTIFACT_SCRIPT = """#!/usr/bin/env bash
+set -euo pipefail
+if [[ "${1:-}" == "--help" ]]; then
+  printf 'usage: normalize-text --text TEXT\\n'
+  exit 0
+fi
+if [[ "${1:-}" != "--text" || $# -ne 2 ]]; then
+  exit 2
+fi
+printf '%s\\n' "$2"
+"""
+
 
 def artifact_candidate(manifest: str = "snippets/normalize-text.md"):
     payload = str(Path(manifest).with_suffix(".py"))
@@ -102,9 +117,14 @@ def artifact_candidate(manifest: str = "snippets/normalize-text.md"):
         "invocation": f"python3 {payload} --text EXAMPLE_TEXT",
         "working_directory": "brain-root",
         "dependencies": ["Python standard library"],
+        "arguments": ["--text TEXT: text to normalize"],
+        "environment": [],
         "inputs": ["Text supplied with --text"],
         "outputs": ["Normalized text on standard output"],
+        "exit_behavior": ["0 on success", "2 on invalid arguments"],
+        "applicability": ["Text values accepted by the active Python runtime"],
         "safety": "read-only",
+        "mutation_default": "read-only",
         "purpose": "Normalize a text value without mutating files or services.",
         "focused_test": {
             "arguments": ["--text", "focused"],
@@ -117,12 +137,18 @@ def artifact_candidate(manifest: str = "snippets/normalize-text.md"):
     }
 
 
-def publish_test_artifact(root: Path, scratch: Path, manifest: str):
-    candidate = artifact_candidate(manifest)
+def publish_test_artifact(
+    root: Path,
+    scratch: Path,
+    manifest: str,
+    candidate_override=None,
+    script_source: str = ARTIFACT_SCRIPT,
+):
+    candidate = candidate_override or artifact_candidate(manifest)
     candidate_path = scratch / "candidate.json"
     candidate_path.write_text(json.dumps(candidate), encoding="utf-8")
     payload_source = scratch / candidate["payload_name"]
-    payload_source.write_text(ARTIFACT_SCRIPT, encoding="utf-8")
+    payload_source.write_text(script_source, encoding="utf-8")
     plan = artifact_module.prepare_bundle(
         root, candidate_path, payload_source, Path(manifest)
     )
@@ -133,11 +159,19 @@ def publish_test_artifact(root: Path, scratch: Path, manifest: str):
     packet["candidate"] = {
         "manifest_path": plan.manifest_relative.as_posix(),
         "payload_path": plan.payload_relative.as_posix(),
-        "payload_source": ARTIFACT_SCRIPT,
+        "payload_source": script_source,
         "purpose": plan.candidate["purpose"],
         "invocation": plan.candidate["invocation"],
+        "language": plan.candidate["language"],
         "runtime": plan.candidate["runtime"],
+        "dependencies": plan.candidate["dependencies"],
+        "arguments": plan.candidate["arguments"],
+        "environment": plan.candidate["environment"],
+        "outputs": plan.candidate["outputs"],
+        "exit_behavior": plan.candidate["exit_behavior"],
+        "applicability": plan.candidate["applicability"],
         "safety": plan.candidate["safety"],
+        "mutation_default": plan.candidate["mutation_default"],
         "verification_status": plan.verification["status"],
     }
     contributions = []
@@ -183,8 +217,16 @@ def review_packet(revision: int = 0):
             "payload_source": ARTIFACT_SCRIPT,
             "purpose": "Normalize a text value.",
             "invocation": "python3 snippets/normalize-text.py --text EXAMPLE_TEXT",
+            "language": "python",
             "runtime": "python>=3.11",
+            "dependencies": ["Python standard library"],
+            "arguments": ["--text TEXT: text to normalize"],
+            "environment": [],
+            "outputs": ["Normalized text on standard output"],
+            "exit_behavior": ["0 on success", "2 on invalid arguments"],
+            "applicability": ["Text values accepted by the active Python runtime"],
             "safety": "read-only",
+            "mutation_default": "read-only",
             "verification_status": "unverified",
         },
     }
@@ -220,8 +262,16 @@ def agreed_review_state(plan, evidence_digest: str = "none"):
         "payload_source": plan.payload_bytes.decode("utf-8"),
         "purpose": plan.candidate["purpose"],
         "invocation": plan.candidate["invocation"],
+        "language": plan.candidate["language"],
         "runtime": plan.candidate["runtime"],
+        "dependencies": plan.candidate["dependencies"],
+        "arguments": plan.candidate["arguments"],
+        "environment": plan.candidate["environment"],
+        "outputs": plan.candidate["outputs"],
+        "exit_behavior": plan.candidate["exit_behavior"],
+        "applicability": plan.candidate["applicability"],
         "safety": plan.candidate["safety"],
+        "mutation_default": plan.candidate["mutation_default"],
         "verification_status": plan.verification["status"],
     }
     contributions = []
@@ -1180,7 +1230,7 @@ class ArtifactEvidenceTests(unittest.TestCase):
 
             with mock.patch.object(
                 artifact_module,
-                "run_python_command",
+                "run_artifact_command",
                 side_effect=[
                     ("passed", "help passed"),
                     ("failed", "focused test failed"),
@@ -1241,6 +1291,405 @@ class ArtifactEvidenceTests(unittest.TestCase):
                 root, Path("snippets/normalize-text.md")
             ).decode("utf-8")
             self.assertIn("verified", recalled)
+
+
+class ArtifactUpdateTests(unittest.TestCase):
+    def test_match_uses_identity_and_keeps_shared_results_free_of_local_metadata(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_path = Path(temporary)
+            root = temporary_path / "brain"
+            root.mkdir()
+            scratch = temporary_path / "scratch"
+            scratch.mkdir()
+            publish_test_artifact(root, scratch, "snippets/normalize-text.md")
+            local_candidate = artifact_candidate("local/notes/normalize-text.md")
+            local_candidate["description"] = "PRIVATE_LOCAL_DESCRIPTION"
+            publish_test_artifact(
+                root,
+                scratch,
+                "local/notes/normalize-text.md",
+                candidate_override=local_candidate,
+            )
+
+            shared = artifact_module.artifact_match_result(
+                root,
+                artifact_candidate("snippets/normalize-text.md"),
+                Path("snippets/normalize-text.md"),
+                [Path("local/notes/normalize-text.md")],
+            )
+
+            self.assertEqual(shared["status"], "authoritative")
+            self.assertEqual(shared["scope"], "shared")
+            self.assertEqual(
+                shared["selected_manifest"], "snippets/normalize-text.md"
+            )
+            encoded = json.dumps(shared)
+            self.assertNotIn("local/", encoded)
+            self.assertNotIn("PRIVATE_LOCAL_DESCRIPTION", encoded)
+
+            local = artifact_module.artifact_match_result(
+                root,
+                local_candidate,
+                Path("local/notes/normalize-text.md"),
+            )
+            self.assertEqual(local["status"], "ambiguous")
+            self.assertEqual(local["scope"], "local-and-shared")
+            self.assertNotIn("selected_manifest", local)
+            self.assertEqual(
+                {item["manifest"] for item in local["candidates"]},
+                {
+                    "local/notes/normalize-text.md",
+                    "snippets/normalize-text.md",
+                },
+            )
+
+    def test_semantic_or_lexical_candidates_are_ambiguous_not_auto_merged(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_path = Path(temporary)
+            root = temporary_path / "brain"
+            root.mkdir()
+            scratch = temporary_path / "scratch"
+            scratch.mkdir()
+            publish_test_artifact(root, scratch, "snippets/normalize-text.md")
+            candidate = artifact_candidate("snippets/cleanup-text.md")
+            candidate["artifact_id"] = "cleanup-text"
+            candidate["payload_name"] = "cleanup-text.py"
+            candidate["invocation"] = (
+                "python3 snippets/cleanup-text.py --text EXAMPLE_TEXT"
+            )
+
+            result = artifact_module.artifact_match_result(
+                root,
+                candidate,
+                Path("snippets/cleanup-text.md"),
+                [Path("snippets/normalize-text.md")],
+            )
+
+            self.assertEqual(result["status"], "ambiguous")
+            self.assertNotIn("selected_manifest", result)
+            self.assertTrue(result["candidates"][0]["semantic_candidate"])
+            self.assertFalse(result["candidates"][0]["identity_match"])
+
+    def test_duplicate_shared_id_is_ambiguous_and_invalidates_the_shared_tree(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_path = Path(temporary)
+            root = temporary_path / "brain"
+            root.mkdir()
+            scratch = temporary_path / "scratch"
+            scratch.mkdir()
+            publish_test_artifact(root, scratch, "snippets/normalize-text.md")
+            duplicate = artifact_candidate("patterns/normalize-text-copy.md")
+            duplicate["payload_name"] = "normalize-text-copy.py"
+            duplicate["invocation"] = (
+                "python3 patterns/normalize-text-copy.py --text EXAMPLE_TEXT"
+            )
+            publish_test_artifact(
+                root,
+                scratch,
+                "patterns/normalize-text-copy.md",
+                candidate_override=duplicate,
+            )
+
+            result = artifact_module.artifact_match_result(
+                root,
+                artifact_candidate("snippets/normalize-text.md"),
+                Path("snippets/normalize-text.md"),
+            )
+            validation = artifact_module.validate_shared_tree(root)
+
+            self.assertEqual(result["status"], "ambiguous")
+            self.assertNotIn("selected_manifest", result)
+            self.assertEqual(len(result["candidates"]), 2)
+            self.assertEqual(validation["status"], "invalid")
+            self.assertTrue(
+                any("duplicate artifact_id" in error["message"] for error in validation["errors"])
+            )
+
+    def test_update_in_place_preserves_history_and_invalidates_old_attestations(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_path = Path(temporary)
+            root = temporary_path / "brain"
+            root.mkdir()
+            scratch = temporary_path / "scratch"
+            scratch.mkdir()
+            manifest, _ = publish_test_artifact(
+                root, scratch, "snippets/normalize-text.md"
+            )
+            old_metadata = artifact_module.parse(manifest).metadata
+            old_digest = old_metadata["bundle_digest"]
+            stale_evidence = artifact_module.load_json(
+                root / "snippets/normalize-text.evidence.json"
+            )
+            stale_review = artifact_module.load_json(
+                root / "snippets/normalize-text.review.json"
+            )
+            stale_approval = artifact_module.load_json(
+                root / "snippets/normalize-text.approval.json"
+            )
+
+            updated_candidate = artifact_candidate("snippets/normalize-text.md")
+            updated_candidate["purpose"] = (
+                "Normalize text deterministically while preserving internal spacing."
+            )
+            candidate_path = scratch / "updated-candidate.json"
+            candidate_path.write_text(json.dumps(updated_candidate), encoding="utf-8")
+            updated_source = ARTIFACT_SCRIPT + "\n# revision two\n"
+            payload_source = scratch / "normalize-text.py"
+            payload_source.write_text(updated_source, encoding="utf-8")
+            plan = artifact_module.prepare_bundle(
+                root,
+                candidate_path,
+                payload_source,
+                Path("snippets/normalize-text.md"),
+            )
+            self.assertNotEqual(plan.bundle_digest, old_digest)
+
+            with self.assertRaisesRegex(
+                artifact_module.ArtifactError, "verification evidence bundle_digest"
+            ):
+                artifact_module.publish_bundle(
+                    root, plan, stale_evidence, stale_review, stale_approval
+                )
+
+            review_state = agreed_review_state(plan)
+            _, evidence = artifact_module.verify_after_review(plan, review_state)
+            approval = approval_module.record_approval(
+                evidence, review_state, "accepted"
+            )
+            artifact_module.publish_bundle(
+                root, plan, evidence, review_state, approval
+            )
+
+            text = manifest.read_text(encoding="utf-8")
+            self.assertIn("## Superseded", text)
+            self.assertIn(str(old_digest), text)
+            self.assertIn(
+                "Normalize a text value without mutating files or services.", text
+            )
+            self.assertEqual(
+                artifact_module.recall_bundle(
+                    root, Path("snippets/normalize-text.md"), show_code=True
+                ),
+                updated_source.encode("utf-8"),
+            )
+            self.assertEqual(
+                artifact_module.parse(manifest).metadata["bundle_digest"],
+                plan.bundle_digest,
+            )
+            self.assertEqual(
+                len(
+                    [
+                        path
+                        for path in root.rglob("*.md")
+                        if artifact_module.parse(path).metadata.get("artifact_id")
+                        == "normalize-text"
+                    ]
+                ),
+                1,
+            )
+            self.assertNotEqual(evidence["evidence_digest"], stale_evidence["evidence_digest"])
+            self.assertNotEqual(review_state["bundle_digest"], stale_review["bundle_digest"])
+            self.assertNotEqual(approval["bundle_digest"], stale_approval["bundle_digest"])
+
+            with self.assertRaisesRegex(
+                artifact_module.ArtifactError,
+                "update does not change bundle identity",
+            ):
+                artifact_module.publish_bundle(
+                    root, plan, evidence, review_state, approval
+                )
+
+
+class ArtifactGeneralizationTests(unittest.TestCase):
+    def trace_request(self, **changes):
+        request = {
+            "schema_version": 1,
+            "kind": "artifact-trace-request",
+            "stable": True,
+            "repeatable": True,
+            "complete": True,
+            "conceptual": False,
+            "one_off": False,
+            "checkpoint": False,
+            "inputs_defined": True,
+            "outputs_defined": True,
+            "applicability_defined": True,
+            "safety_defined": True,
+            "ecosystem": "generic",
+            "available_languages": ["python", "javascript", "shell"],
+        }
+        request.update(changes)
+        return request
+
+    def test_trace_rejects_non_operational_knowledge_and_selects_native_language(self):
+        conceptual = artifact_module.trace_artifact(
+            self.trace_request(conceptual=True)
+        )
+        javascript = artifact_module.trace_artifact(
+            self.trace_request(
+                ecosystem="javascript",
+                available_languages=["javascript", "python"],
+            )
+        )
+        generic = artifact_module.trace_artifact(
+            self.trace_request(available_languages=["shell", "python"])
+        )
+
+        self.assertEqual(
+            conceptual,
+            {
+                "schema_version": 1,
+                "kind": "artifact-trace-result",
+                "eligible": False,
+                "reason": "non-operational",
+            },
+        )
+        self.assertEqual(javascript["language"], "javascript")
+        self.assertEqual(generic["language"], "python")
+
+    def test_shell_bundle_records_complete_contract_and_recalls_exact_bytes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_path = Path(temporary)
+            root = temporary_path / "brain"
+            root.mkdir()
+            scratch = temporary_path / "scratch"
+            scratch.mkdir()
+            candidate = artifact_candidate("snippets/normalize-shell.md")
+            candidate.update(
+                {
+                    "artifact_id": "normalize-shell",
+                    "title": "Normalize text with shell",
+                    "payload_name": "normalize-shell.sh",
+                    "language": "shell",
+                    "runtime": "bash>=3.2",
+                    "invocation": (
+                        "bash snippets/normalize-shell.sh --text EXAMPLE_TEXT"
+                    ),
+                    "dependencies": ["Bash standard builtins"],
+                    "environment": ["LC_ALL=EXAMPLE_LOCALE"],
+                    "applicability": ["POSIX-like host with Bash 3.2 or newer"],
+                }
+            )
+            manifest, _ = publish_test_artifact(
+                root,
+                scratch,
+                "snippets/normalize-shell.md",
+                candidate_override=candidate,
+                script_source=SHELL_ARTIFACT_SCRIPT,
+            )
+            metadata = artifact_module.parse(manifest).metadata
+
+            for field in (
+                "artifact_arguments",
+                "artifact_environment",
+                "artifact_exit_behavior",
+                "artifact_applicability",
+                "artifact_mutation_default",
+            ):
+                self.assertIn(field, metadata)
+            self.assertEqual(metadata["artifact_language"], "shell")
+            self.assertEqual(
+                artifact_module.recall_bundle(
+                    root, Path("snippets/normalize-shell.md"), show_code=True
+                ),
+                SHELL_ARTIFACT_SCRIPT.encode("utf-8"),
+            )
+
+    def test_context_mismatch_returns_only_incompatibility_without_writes(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_path = Path(temporary)
+            root = temporary_path / "brain"
+            root.mkdir()
+            scratch = temporary_path / "scratch"
+            scratch.mkdir()
+            manifest, _ = publish_test_artifact(
+                root, scratch, "snippets/normalize-text.md"
+            )
+            before = {
+                path.relative_to(root): (path.stat().st_mtime_ns, path.read_bytes())
+                for path in root.rglob("*")
+                if path.is_file()
+            }
+
+            result = artifact_module.recall_bundle(
+                root,
+                manifest.relative_to(root),
+                show_code=True,
+                context_language="javascript",
+            )
+            after = {
+                path.relative_to(root): (path.stat().st_mtime_ns, path.read_bytes())
+                for path in root.rglob("*")
+                if path.is_file()
+            }
+
+            self.assertEqual(
+                result,
+                b"incompatible: language requires python, got javascript; request adaptation separately\n",
+            )
+            self.assertEqual(after, before)
+
+    def test_mutating_candidate_must_use_preview_for_invocation_and_checks(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            temporary_path = Path(temporary)
+            root = temporary_path / "brain"
+            root.mkdir()
+            scratch = temporary_path / "scratch"
+            scratch.mkdir()
+            candidate = artifact_candidate()
+            candidate["safety"] = "mutating"
+            candidate["mutation_default"] = "preview"
+            candidate_path = scratch / "candidate.json"
+            candidate_path.write_text(json.dumps(candidate), encoding="utf-8")
+            payload = scratch / candidate["payload_name"]
+            payload.write_text(ARTIFACT_SCRIPT, encoding="utf-8")
+
+            with self.assertRaisesRegex(
+                artifact_module.ArtifactError,
+                "invocation must select --preview",
+            ):
+                artifact_module.prepare_bundle(
+                    root,
+                    candidate_path,
+                    payload,
+                    Path("snippets/normalize-text.md"),
+                )
+
+
+class ArtifactEvalTests(unittest.TestCase):
+    def test_eval_corpus_is_schema_valid_complete_and_deterministic(self):
+        suite = artifact_module.load_json(ROOT / "evals" / "artifact-cases.json")
+        required = {
+            "eligible-operation",
+            "prose-only-knowledge",
+            "native-language",
+            "complete-manifest",
+            "safe-mutation-default",
+            "private-routing",
+            "duplicate-update",
+            "review-grounding",
+            "review-agreement",
+            "verification-calibration",
+            "approval-binding",
+            "recall-three-fields",
+            "recall-byte-exact",
+            "authoritative-ranking",
+            "context-mismatch",
+            "offline-read-only",
+            "malformed-json",
+            "stale-contribution",
+            "digest-mismatch",
+            "incomplete-publication",
+        }
+        self.assertEqual({case["id"] for case in suite["cases"]}, required)
+
+        with tempfile.TemporaryDirectory() as first, tempfile.TemporaryDirectory() as second:
+            result_one = artifact_eval_module.run_suite(suite, Path(first))
+            result_two = artifact_eval_module.run_suite(suite, Path(second))
+
+        self.assertEqual(result_one, result_two)
+        self.assertEqual(result_one["status"], "passed")
+        self.assertEqual(result_one["passed"], len(required))
 
 
 class CanvasTests(unittest.TestCase):

@@ -111,18 +111,22 @@ the change.
 
 For a stable, repeatable operation, `$remember` can move code generation and
 basic verification into the write path so a later `$recall` does not recreate
-the implementation. The first tracer supports new, read-only Python command-line
-artifacts. Other languages, mutating operations, and bundle updates remain on
-the prose path until their safety contracts are implemented.
+the implementation. The schema-backed tracer rejects unsuitable knowledge and
+selects Python, JavaScript, or Bash according to the operation's ecosystem.
+Mutating artifacts must default to preview, and authoritative revisions update
+the existing bundle rather than creating a duplicate.
 
 An artifact bundle contains one canonical searchable Markdown manifest and one
 companion script. The manifest records a stable artifact identity, exact
-repository-relative invocation, runtime assumptions, inputs, outputs, safety
-behavior, verification state, and a digest covering the recall-relevant
+repository-relative invocation, runtime and dependency assumptions, arguments,
+environment placeholders, inputs, outputs, exit behavior, applicability,
+safety and mutation-default behavior, verification state, and a digest covering the recall-relevant
 manifest projection plus the exact payload bytes.
 
-Remember creates a schema-valid candidate and payload under ignored `.tmp/`,
-then prepares them without writing knowledge:
+Remember first emits a schema-valid eligibility/language trace, then creates a
+schema-valid candidate and payload under ignored `.tmp/`. It finds an existing
+artifact by identity and reports looser lexical, applicability, or semantic
+matches as ambiguous before preparing without writing knowledge:
 
 ```sh
 python3 bin/artifact_bundle.py prepare \
@@ -132,7 +136,7 @@ python3 bin/artifact_bundle.py prepare \
   --evidence-output .tmp/example.preliminary-evidence.json
 ```
 
-Preparation compiles source in memory but does not execute generated code.
+Preparation performs a non-executing language syntax check but does not run the payload.
 Three independent, schema-valid challenge reviews must agree on that exact
 bundle first. A deterministic reducer rejects stale or mismatched
 contributions, preserves blockers, and caps repair at three revisions. After
@@ -151,7 +155,19 @@ python3 bin/artifact_bundle.py recall --manifest snippets/example.md
 Its default output is exactly the stored payload path, invocation, and
 verification state. `--show-code` returns the stored payload bytes unchanged.
 The projector checks the bundle digest first and never executes, adapts, or
-writes the artifact.
+writes the artifact. Optional language, runtime, and applicability context
+returns one incompatibility statement instead of mismatched or adapted code.
+
+The deterministic acceptance corpus uses schema-valid JSON inputs and results:
+
+```sh
+python3 scripts/eval_artifacts.py --output /tmp/artifact-eval-result.json
+```
+
+It checks eligibility, language choice, complete manifests, safety and privacy,
+updates, review/evidence/approval binding, exact minimal recall, offline
+read-only behavior, and fail-closed protocol cases. `scripts/verify.sh` runs the
+same gate automatically.
 
 ## Retrieval
 

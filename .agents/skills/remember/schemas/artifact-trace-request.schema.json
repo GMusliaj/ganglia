@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.invalid/brain/artifact-trace-request.schema.json",
+  "title": "Brain artifact trace request",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "kind",
+    "stable",
+    "repeatable",
+    "complete",
+    "conceptual",
+    "one_off",
+    "checkpoint",
+    "inputs_defined",
+    "outputs_defined",
+    "applicability_defined",
+    "safety_defined",
+    "ecosystem",
+    "available_languages"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "kind": {"type": "string", "const": "artifact-trace-request"},
+    "stable": {"type": "boolean"},
+    "repeatable": {"type": "boolean"},
+    "complete": {"type": "boolean"},
+    "conceptual": {"type": "boolean"},
+    "one_off": {"type": "boolean"},
+    "checkpoint": {"type": "boolean"},
+    "inputs_defined": {"type": "boolean"},
+    "outputs_defined": {"type": "boolean"},
+    "applicability_defined": {"type": "boolean"},
+    "safety_defined": {"type": "boolean"},
+    "ecosystem": {
+      "type": "string",
+      "enum": ["python", "javascript", "shell", "generic"]
+    },
+    "available_languages": {
+      "type": "array",
+      "items": {"type": "string", "enum": ["python", "javascript", "shell"]},
+      "minItems": 1,
+      "uniqueItems": true
+    }
+  },
+  "additionalProperties": false
+}

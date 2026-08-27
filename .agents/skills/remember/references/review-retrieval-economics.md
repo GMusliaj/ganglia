@@ -6,7 +6,7 @@ execute the payload, or repair the candidate.
 Challenge whether the stored manifest and invocation actually eliminate later
 synthesis. Look for missing runtime assumptions, working-directory dependence,
 implicit environment inputs, placeholders requiring interpretation,
-incomplete applicability constraints, ambiguous outputs, and cases where recall
+incomplete applicability constraints, ambiguous outputs or exit behavior, and cases where recall
 would need to explain, compare, regenerate, or adapt code before use.
 
 Report only material, grounded findings tied to payload lines or the manifest

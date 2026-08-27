@@ -34,7 +34,7 @@
         "type": "object",
         "required": ["id", "status", "command", "result"],
         "properties": {
-          "id": {"type": "string", "enum": ["python-syntax", "help-output", "focused-test", "representative-run"]},
+          "id": {"type": "string", "enum": ["python-syntax", "javascript-syntax", "shell-syntax", "help-output", "focused-test", "representative-run"]},
           "status": {"type": "string", "enum": ["passed", "failed", "unavailable", "authorization-blocked"]},
           "command": {"type": "string", "minLength": 1},
           "result": {"type": "string", "minLength": 1}

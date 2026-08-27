@@ -18,9 +18,14 @@
     "invocation",
     "working_directory",
     "dependencies",
+    "arguments",
+    "environment",
     "inputs",
     "outputs",
+    "exit_behavior",
+    "applicability",
     "safety",
+    "mutation_default",
     "purpose",
     "focused_test",
     "representative_run"
@@ -64,15 +69,15 @@
     },
     "payload_name": {
       "type": "string",
-      "pattern": "^[a-z0-9]+(?:[_-][a-z0-9]+)*\\.py$"
+      "pattern": "^[a-z0-9]+(?:[_-][a-z0-9]+)*\\.(?:py|mjs|sh)$"
     },
     "language": {
       "type": "string",
-      "const": "python"
+      "enum": ["python", "javascript", "shell"]
     },
     "runtime": {
       "type": "string",
-      "pattern": "^python(?:3)?(?:>=[0-9]+\\.[0-9]+)?$"
+      "minLength": 1
     },
     "invocation": {
       "type": "string",
@@ -87,6 +92,20 @@
       "items": {
         "type": "string",
         "minLength": 1
+      },
+      "uniqueItems": true
+    },
+    "arguments": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "minItems": 1,
+      "uniqueItems": true
+    },
+    "environment": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Z][A-Z0-9_]*=EXAMPLE_[A-Z0-9_]+$"
       },
       "uniqueItems": true
     },
@@ -108,9 +127,25 @@
       "minItems": 1,
       "uniqueItems": true
     },
+    "exit_behavior": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "minItems": 2,
+      "uniqueItems": true
+    },
+    "applicability": {
+      "type": "array",
+      "items": {"type": "string", "minLength": 1},
+      "minItems": 1,
+      "uniqueItems": true
+    },
     "safety": {
       "type": "string",
-      "const": "read-only"
+      "enum": ["read-only", "mutating"]
+    },
+    "mutation_default": {
+      "type": "string",
+      "enum": ["read-only", "preview"]
     },
     "purpose": {
       "type": "string",

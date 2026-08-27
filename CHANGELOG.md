@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added a deterministic 20-case, schema-valid artifact evaluation gate covering
+  materialization, review, verification, privacy, updates, protocol failures,
+  and exact offline recall behavior.
+- Added deterministic eligibility and language tracing for Python, JavaScript,
+  and Bash artifacts, complete invocation/applicability contracts, and
+  read-only recall mismatch reporting.
+- Added closed-schema artifact matching that combines stable identity,
+  applicability, lexical overlap, and optional semantic candidates while
+  keeping judgment-heavy matches explicitly ambiguous.
 - Added content-bound verification evidence and anonymous human-approval
   records so generated code is reviewed before execution checks and cannot be
   published unless checks pass and the exact bundle, evidence, and review
@@ -35,6 +44,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Made authoritative artifact revisions update one bundle in place, preserve
+  superseded rationale, and require fresh content-bound review, verification,
+  and approval before recall accepts the new bytes.
 - Isolated sanctioned shared-memory commits from the caller's real Git index,
   preserving unrelated staged work while validating and committing complete
   artifact bundles through the existing allowlist and publication guard.
@@ -73,6 +85,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Prevented shared artifact matching from scanning or emitting private local
+  candidate metadata, and rejected partial or identity-mismatched updates.
 - Made artifact validation fail closed on malformed metadata, missing or
   orphaned payloads, path escape, privacy-layer crossing, incompatible runtime
   or bundle placement, and content-digest mismatch before recall returns code.

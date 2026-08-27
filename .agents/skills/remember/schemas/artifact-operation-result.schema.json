@@ -68,7 +68,7 @@
             "properties": {
               "id": {
                 "type": "string",
-                "enum": ["python-syntax", "help-output", "focused-test", "representative-run"]
+                "enum": ["python-syntax", "javascript-syntax", "shell-syntax", "help-output", "focused-test", "representative-run"]
               },
               "status": {
                 "type": "string",

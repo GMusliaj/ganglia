@@ -54,9 +54,15 @@ do not assume a default `rg` traversal includes it.
 
 Union QMD and text-search hits and deduplicate by path. Rank:
 
-1. exact title or tag matches;
-2. description matches;
-3. body matches and confident QMD semantic candidates.
+1. for an operational query, one valid ready artifact with an exact
+   `artifact_id`, title, or invocation match;
+2. other exact title or tag matches;
+3. description matches;
+4. body matches and confident QMD semantic candidates.
+
+Never prefer an explanatory prose entry over an equally relevant authoritative
+ready artifact for an operational query. Multiple exact artifact identities are
+ambiguous and must not be projected as authoritative.
 
 Prefer durable shared patterns, decisions, and concepts over local project or
 short-memory hits unless local knowledge is genuinely more relevant, especially
@@ -68,7 +74,7 @@ clone contains it. Follow file-relative Markdown links one hop when useful.
 
 ## 4. Project an exact artifact match
 
-When the highest-ranked exact operational match is a manifest containing
+When the highest-ranked exact operational match is the one current manifest containing
 `artifact_id`, `artifact_payload`, `artifact_invocation`,
 `artifact_verification`, and `bundle_digest`, use the repository-owned read-only
 projector instead of paraphrasing or regenerating code:
@@ -81,9 +87,17 @@ Return its stdout exactly. It is three lines: relative payload path, stored
 invocation, and stored verification state. If the user explicitly asks for the
 code, add `--show-code` and return the stored bytes exactly.
 
+An authoritative update keeps this manifest path stable while replacing its
+content-bound bundle and preserving prior rationale under `## Superseded`.
 The projector recomputes bundle identity before returning anything. Surface a
 digest or contract failure and stop; do not synthesize a replacement, adapt the
 payload, execute it, or edit any file during recall.
+
+When the user supplies runtime, language, or applicability context, pass it as
+`--context-runtime`, `--context-language`, or repeated `--applicability`
+arguments. A mismatch returns one `incompatible:` statement that requires a
+separate adaptation request, even with `--show-code`; never return mismatched
+bytes and never adapt them during recall.
 
 ## 5. Present
 

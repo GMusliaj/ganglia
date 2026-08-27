@@ -4,6 +4,7 @@ set -euo pipefail
 BRAIN_ROOT="$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd -P)"
 cd "$BRAIN_ROOT"
 
+scripts/setup-python.sh
 scripts/init.sh
 scripts/install-codex-commands.sh
 scripts/install-qmd-mcp.sh
