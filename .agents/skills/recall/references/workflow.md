@@ -66,12 +66,31 @@ entry expressing the same knowledge.
 Label each result `shared` or `local` so the user knows whether a teammate's
 clone contains it. Follow file-relative Markdown links one hop when useful.
 
-## 4. Present
+## 4. Project an exact artifact match
 
-Return a tight cited list. For each hit, include relative path, title, and the
-relevant lines or a concise paraphrase with line citations. If nothing matches,
-say so and suggest the closest registered tags from `meta/tag-taxonomy.md`; do
-not guess.
+When the highest-ranked exact operational match is a manifest containing
+`artifact_id`, `artifact_payload`, `artifact_invocation`,
+`artifact_verification`, and `bundle_digest`, use the repository-owned read-only
+projector instead of paraphrasing or regenerating code:
+
+```sh
+python3 bin/artifact_bundle.py recall --manifest <relative-manifest-path>
+```
+
+Return its stdout exactly. It is three lines: relative payload path, stored
+invocation, and stored verification state. If the user explicitly asks for the
+code, add `--show-code` and return the stored bytes exactly.
+
+The projector recomputes bundle identity before returning anything. Surface a
+digest or contract failure and stop; do not synthesize a replacement, adapt the
+payload, execute it, or edit any file during recall.
+
+## 5. Present
+
+For non-artifact results, return a tight cited list. For each hit, include
+relative path, title, and the relevant lines or a concise paraphrase with line
+citations. If nothing matches, say so and suggest the closest registered tags
+from `meta/tag-taxonomy.md`; do not guess.
 
 Recall is read-only. Never create files, update indexes, run QMD update/embed,
 commit, or otherwise mutate state.

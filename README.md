@@ -107,6 +107,52 @@ Use file-relative Markdown links between entries. Never silently delete a
 superseded claim; move it under `## Superseded` with enough context to explain
 the change.
 
+## Materialized artifacts
+
+For a stable, repeatable operation, `$remember` can move code generation and
+basic verification into the write path so a later `$recall` does not recreate
+the implementation. The first tracer supports new, read-only Python command-line
+artifacts. Other languages, mutating operations, and bundle updates remain on
+the prose path until their safety contracts are implemented.
+
+An artifact bundle contains one canonical searchable Markdown manifest and one
+companion script. The manifest records a stable artifact identity, exact
+repository-relative invocation, runtime assumptions, inputs, outputs, safety
+behavior, verification state, and a digest covering the recall-relevant
+manifest projection plus the exact payload bytes.
+
+Remember creates a schema-valid candidate and payload under ignored `.tmp/`,
+then prepares them without writing knowledge:
+
+```sh
+python3 bin/artifact_bundle.py prepare \
+  --candidate .tmp/example.json \
+  --payload .tmp/example.py \
+  --manifest snippets/example.md \
+  --evidence-output .tmp/example.preliminary-evidence.json
+```
+
+Preparation compiles source in memory but does not execute generated code.
+Three independent, schema-valid challenge reviews must agree on that exact
+bundle first. A deterministic reducer rejects stale or mismatched
+contributions, preserves blockers, and caps repair at three revisions. After
+agreement, the artifact verifier may run the declared non-mutating help,
+focused, and representative checks and emit content-bound evidence. Explicit
+human approval binds the bundle digest, evidence digest, and review revision.
+Reviewer agreement never manufactures empirical verification. Any covered
+change needs fresh review, verification, and acceptance.
+
+For an exact artifact match, recall uses the read-only projector:
+
+```sh
+python3 bin/artifact_bundle.py recall --manifest snippets/example.md
+```
+
+Its default output is exactly the stored payload path, invocation, and
+verification state. `--show-code` returns the stored payload bytes unchanged.
+The projector checks the bundle digest first and never executes, adapts, or
+writes the artifact.
+
 ## Retrieval
 
 Retrieval is tiered:
@@ -223,9 +269,11 @@ not overwrite existing commands.
 
 `$remember` runs `scripts/auto-commit.sh` for shared knowledge. This is the
 owner-sanctioned exception to ordinary commit discipline. The script regenerates
-indexes, runs the repository-owned publication and routing guard, stages only
-allowlisted shared paths, and commits without pushing. If the guard fails, it
-stops before staging.
+indexes, validates artifact bundle closure, runs the repository-owned
+publication and routing guard, and commits only allowlisted shared paths without
+pushing. It uses an isolated Git index so unrelated staged work is preserved and
+cannot leak into the memory commit. A validation, guard, hook, or commit failure
+leaves the real index untouched.
 
 ## License
 

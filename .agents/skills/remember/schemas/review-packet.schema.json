@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.invalid/brain/review-packet.schema.json",
+  "title": "Brain artifact review packet",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "kind",
+    "id",
+    "review_id",
+    "base_revision",
+    "producer",
+    "artifact_id",
+    "bundle_digest",
+    "evidence_digest",
+    "required_lenses",
+    "max_revisions",
+    "candidate"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "kind": {"type": "string", "const": "review-packet"},
+    "id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "review_id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "base_revision": {"type": "integer", "minimum": 0},
+    "producer": {"type": "string", "const": "remember"},
+    "artifact_id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "bundle_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "evidence_digest": {"type": "string", "pattern": "^(?:none|sha256:[0-9a-f]{64})$"},
+    "required_lenses": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": ["scriptability", "execution-risk", "retrieval-economics"]
+      },
+      "minItems": 3,
+      "uniqueItems": true
+    },
+    "max_revisions": {"type": "integer", "minimum": 1, "maximum": 3},
+    "candidate": {
+      "type": "object",
+      "required": [
+        "manifest_path",
+        "payload_path",
+        "payload_source",
+        "purpose",
+        "invocation",
+        "runtime",
+        "safety",
+        "verification_status"
+      ],
+      "properties": {
+        "manifest_path": {"type": "string", "minLength": 1},
+        "payload_path": {"type": "string", "minLength": 1},
+        "payload_source": {"type": "string", "minLength": 1},
+        "purpose": {"type": "string", "minLength": 1},
+        "invocation": {"type": "string", "minLength": 1},
+        "runtime": {"type": "string", "minLength": 1},
+        "safety": {"type": "string", "minLength": 1},
+        "verification_status": {"type": "string", "enum": ["verified", "unverified"]}
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

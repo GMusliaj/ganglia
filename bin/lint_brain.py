@@ -7,6 +7,7 @@ import argparse
 import re
 from pathlib import Path
 
+from artifact_bundle import validate_shared_tree
 from okf import parse
 
 
@@ -100,6 +101,12 @@ def lint(root: Path) -> tuple[list[str], list[str]]:
             warnings.append(
                 f"{path.relative_to(root)}: no inbound links from another shared entry"
             )
+
+    artifact_result = validate_shared_tree(root)
+    errors.extend(
+        f"{error['path']}: invalid artifact bundle: {error['message']}"
+        for error in artifact_result["errors"]
+    )
 
     return errors, warnings
 

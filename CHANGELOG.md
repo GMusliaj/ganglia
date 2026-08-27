@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added content-bound verification evidence and anonymous human-approval
+  records so generated code is reviewed before execution checks and cannot be
+  published unless checks pass and the exact bundle, evidence, and review
+  revision were accepted.
+- Added a closed-schema, content-bound artifact review protocol with independent
+  scriptability, execution-risk, and retrieval-economics lenses plus a
+  deterministic reducer that preserves blockers and bounds revision attempts.
+- Added a schema-backed, content-bound tracer for preparing and explicitly
+  accepting safe Python artifact bundles during remember, then returning their
+  stored invocation or exact source bytes through read-only recall.
 - Added a shared-only canvas preview to the README for the public repository.
 - Portable OKF-lite knowledge folders with generated shared and private
   navigation indexes.
@@ -25,6 +35,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Isolated sanctioned shared-memory commits from the caller's real Git index,
+  preserving unrelated staged work while validating and committing complete
+  artifact bundles through the existing allowlist and publication guard.
 - Excluded local task and specification artifacts from version control.
 - Refactored the canvas header around a responsive Brain-and-Canvas identity,
   centered search, quieter controls, and a clearer desktop/mobile hierarchy.
@@ -60,6 +73,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Made artifact validation fail closed on malformed metadata, missing or
+  orphaned payloads, path escape, privacy-layer crossing, incompatible runtime
+  or bundle placement, and content-digest mismatch before recall returns code.
 - Expanded the fail-closed publication guard across every tracked or
   non-ignored candidate, including tooling and documentation, with checks for
   machine paths, private identity terms, personal email addresses, and common

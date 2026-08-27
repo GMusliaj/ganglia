@@ -1,0 +1,47 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.invalid/brain/verification-evidence.schema.json",
+  "title": "Brain artifact verification evidence",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "kind",
+    "id",
+    "producer",
+    "artifact_id",
+    "bundle_digest",
+    "evidence_digest",
+    "generated_at",
+    "runtime",
+    "status",
+    "checks"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "kind": {"type": "string", "const": "verification-evidence"},
+    "id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "producer": {"type": "string", "const": "artifact-bundle"},
+    "artifact_id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "bundle_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "evidence_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "generated_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}$"},
+    "runtime": {"type": "string", "minLength": 1},
+    "status": {"type": "string", "enum": ["verified", "unverified"]},
+    "checks": {
+      "type": "array",
+      "minItems": 4,
+      "items": {
+        "type": "object",
+        "required": ["id", "status", "command", "result"],
+        "properties": {
+          "id": {"type": "string", "enum": ["python-syntax", "help-output", "focused-test", "representative-run"]},
+          "status": {"type": "string", "enum": ["passed", "failed", "unavailable", "authorization-blocked"]},
+          "command": {"type": "string", "minLength": 1},
+          "result": {"type": "string", "minLength": 1}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

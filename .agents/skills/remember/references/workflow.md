@@ -78,7 +78,25 @@ never automatically move local material to shared. If a short-memory note has
 proven reusable and the user authorizes promotion, create or update the right
 durable entry and remove the obsolete scratch note.
 
-## 4. Write OKF-lite
+## 4. Decide whether to materialize an artifact
+
+Materialize when the retained knowledge is a stable, repeatable operation with
+clear inputs, outputs, applicability, and safety boundaries. Do not force
+decisions, concepts, incomplete investigations, one-off actions, or checkpoints
+into scripts.
+
+For a qualifying operation, read and follow
+[artifact-materialization.md](artifact-materialization.md). The initial tracer
+supports safe, read-only Python command-line artifacts. If the operation needs
+another language, external mutation, or an update to an existing bundle, keep
+the durable knowledge as prose and state that materialization is not supported
+yet; do not improvise an unvalidated artifact path.
+
+## 5. Write OKF-lite
+
+For ordinary knowledge, use the prose path below. Artifact manifests are
+rendered by the materialization workflow and remain the canonical OKF-lite
+entry; do not hand-edit their content digest or verification fields.
 
 Use `<folder>/<kebab-slug>.md`. Required frontmatter: `type`. Normally also add
 `title`, a one-sentence `description`, tags registered in
@@ -93,7 +111,7 @@ Never write credentials, tokens, customer data, or other secret material into
 shared content. Use unmistakable placeholders such as `EXAMPLE_NOT_A_SECRET`
 when an example is necessary.
 
-## 5. Reindex and commit
+## 6. Reindex and commit
 
 For a shared entry, run `scripts/auto-commit.sh`. It regenerates indexes and is
 the owner-sanctioned exception allowing commits only for the Brain shared
@@ -110,7 +128,7 @@ around `scripts/guard_shared.py`, hooks, or policy. Report the offending
 scrub the private term or machine-specific path, or move engagement-specific
 knowledge to `local/`.
 
-## 6. Report
+## 7. Report
 
 On success, output one line only: `saved <relative-path>`. Do not echo content,
 commit hashes, or index churn. On failure, be loud: include exact scanner output
