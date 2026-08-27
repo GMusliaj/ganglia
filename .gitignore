@@ -1,0 +1,48 @@
+# Private knowledge and machine-local identity. Nothing here is publishable.
+local/
+
+# Disposable Brain projections and local semantic indexes. Keep the portable
+# QMD collection definition, but never its database, models, or journals.
+.tmp/
+.qmd/*
+!.qmd/index.yml
+
+# Installed build dependencies and package-manager logs.
+bin/node_modules/
+.npm/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Python environments, bytecode, test caches, and coverage output.
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+
+# User-specific agent, editor, operating-system, and shell artifacts.
+.codex/
+.claude/
+.idea/
+.vscode/
+.DS_Store
+*.swp
+*.swo
+*~
+
+# Local environment and credential material. Public examples must use the
+# explicit `.example` suffix and unmistakably non-secret placeholder values.
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+credentials*.json
+secrets*.json

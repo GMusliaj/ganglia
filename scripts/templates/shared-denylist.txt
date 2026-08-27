@@ -1,0 +1,2 @@
+# One private customer, engagement, identity, or hostname term per line.
+# This file is gitignored. Do not add credential-shaped examples.

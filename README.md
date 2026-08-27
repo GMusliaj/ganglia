@@ -1,0 +1,205 @@
+<h1 align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/brain-logo-dark.svg">
+    <img src="docs/assets/brain-logo.svg" alt="Brain" width="440">
+  </picture>
+</h1>
+
+Brain is a portable, cross-repository second brain: LLM agents distill durable
+knowledge into structured Markdown, retrieve it across projects, and keep
+personal or engagement-specific context local. It adapts [Karpathy's LLM Wiki
+pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f)
+to two explicit operations:
+
+- `$remember [optional lesson]` writes or updates knowledge. The legacy Codex
+  alias is `/prompts:remember`.
+- `$recall <query>` searches without writing. The legacy Codex alias is
+  `/prompts:recall`.
+
+Codex reserves top-level slash commands, so literal `/remember` and `/recall`
+cannot be registered. Skills are the supported interface; `/skills` opens their
+selector.
+
+## Layout
+
+```text
+patterns/              reusable approaches
+lessons/               empirical, non-obvious findings
+decisions/             decisions and rationale
+concepts/              durable concepts and mental models
+snippets/              reusable code and procedures
+sources/               source-grounded distillations
+infra/                 Brain architecture and operating infrastructure
+local/                 gitignored private and episodic memory
+  notes/                durable personal notes
+  projects/<name>/      engagement/project knowledge and checkpoints
+  short-mem/            scratch and half-formed notes
+meta/tag-taxonomy.md    registered shared tags
+MEMORY.md               generated shared index
+local/MEMORY.local.md   generated local orientation and index
+bin/                    OKF validation, linting, and indexing tools
+scripts/                setup, security, command installation, and QA
+```
+
+## Public repository boundary
+
+The repository is designed to be published from a normal Git clone. Its public
+surface and its machine-local state are deliberately different:
+
+| Layer | Examples | Git policy |
+| --- | --- | --- |
+| Portable knowledge | `patterns/`, `lessons/`, `decisions/`, `concepts/`, `snippets/`, `sources/`, `infra/` | Tracked and shareable |
+| Build and operating source | `bin/`, `scripts/`, `tests/`, `.agents/`, `docs/`, package manifests, `.mcp.json`, `.qmd/index.yml` | Tracked and shareable |
+| Generated public navigation | `MEMORY.md`, shared-folder `index.md` files | Tracked and regenerated from public entries |
+| Private knowledge | `local/notes/`, `local/projects/`, checkpoints, session catalog, denylist | Ignored; never publish |
+| Disposable runtime output | `.qmd/` databases, `.tmp/` canvas, `bin/node_modules/`, caches and virtual environments | Ignored; rebuild locally |
+
+`scripts/guard_shared.py` scans every tracked or non-ignored publication
+candidate, not only knowledge entries. It blocks machine-specific home paths,
+non-example email addresses, common credential shapes, terms in the private
+denylist, and local runtime identity values without printing the private value.
+Both `scripts/verify.sh` and the shared-memory auto-commit run this guard.
+
+Before making the repository public, run `python3 scripts/audit_public.py`.
+Unlike the ordinary working-tree guard, this pre-publication audit also scans
+all reachable Git blobs and commit-author email metadata. It reports locations
+without echoing the sensitive value and never rewrites history.
+
+Ignore rules are containment, not permission to store arbitrary secrets. Keep
+credentials outside the repository whenever possible, and inspect Git history
+and commit-author metadata separately before making an existing repository
+public.
+
+## Entry format: OKF-lite
+
+Only `type` is mandatory. `title`, a one-sentence `description`, registered
+`tags`, and `date` make retrieval and indexing better.
+
+```markdown
+---
+type: pattern
+title: Prefer a retrieval floor
+description: Semantic search should improve recall without becoming required infrastructure.
+tags: [knowledge-management, retrieval]
+date: 2026-08-27
+---
+
+# Prefer a retrieval floor
+
+## Active
+
+Durable claims, decisions, examples, or snippets.
+
+## Superseded
+
+Older claims retained when an update replaces them. Omit when empty.
+
+## Source
+
+Where this knowledge came from.
+```
+
+Use file-relative Markdown links between entries. Never silently delete a
+superseded claim; move it under `## Superseded` with enough context to explain
+the change.
+
+## Retrieval
+
+Retrieval is tiered:
+
+1. QMD is the semantic ceiling, exposed to Codex through the `brain-qmd` MCP
+   server (`query`, `get`, `multi_get`, and `status`).
+2. `rg` over the entire repository is the always-available floor and source of
+   truth.
+3. Results are merged and ranked, favoring exact metadata matches and durable
+   shared knowledge unless local project context is more relevant.
+
+The checked-in `.qmd/index.yml` defines two local collections: `brain` spans
+the repository (including gitignored `local/`), while the excluded-by-default
+`codex-sessions` collection indexes compact private summaries generated from
+Codex JSONL history. `bin/sync_codex_sessions.py` refreshes those summaries
+under gitignored `local/session-catalog/`; raw transcripts are never copied
+into committed output or embedded wholesale. The session collection is
+available to temporal recall and the all-scope canvas, but never participates
+in default shared retrieval.
+
+QMD runs locally. Install it with `npm install -g @tobilu/qmd`, then build the
+private session catalog and indexes through the repository refresh command:
+
+```sh
+scripts/refresh-qmd.sh
+scripts/install-qmd-mcp.sh
+```
+
+The MCP installer adds a global Codex stdio server whose command is the Brain
+wrapper with `mcp`. Codex CLI, the IDE extension, and the desktop app share that
+configuration; start a new Codex session after first installation so its tools
+are loaded. The wrapper selects the Node version in `.nvmrc` and the Brain's
+project-local index. Recall uses MCP for QMD access and still works through the
+text-search floor when the server or models are unavailable. If a host's GPU
+backend is unstable, QMD documents `QMD_FORCE_CPU=1` as an opt-in fallback.
+
+`scripts/refresh-qmd.sh` is the internal maintenance boundary. It may call the
+QMD CLI for `update` and `embed` because QMD's MCP server intentionally exposes
+retrieval and status tools, not index mutations. Do not use the CLI for normal
+`$recall` or `$remember` retrieval.
+
+## Knowledge canvas
+
+Build an interactive, offline force-directed view of the shared Brain:
+
+```sh
+bin/canvas.py
+```
+
+The canvas opens `.tmp/brain-canvas.html` with a collection/session library on
+the left, the graph in the center, and a persistent inspector on the right.
+Click a node to see its linked patterns, concepts, decisions, sessions, and
+tags grouped by kind. The map key explains the stable node colors and shapes as
+well as the three edge styles. Double-click a node or use the inspector link to
+open its source; drag, pan, zoom, search, filter, or fit the graph as needed.
+
+The default view remains shared-only. Use `--scope all` explicitly to include
+gitignored local knowledge and the private `codex-sessions` collection; recent
+sessions then appear in the left library and connect to knowledge through
+best-effort QMD semantic edges.
+
+Useful variants:
+
+```sh
+bin/canvas.py --no-open
+bin/canvas.py --dry-run
+bin/canvas.py --scope all
+bin/canvas.py --collection brain --semantic-threshold 0.65
+bin/canvas.py --all-collections --scope all
+```
+
+Run `npm install --prefix bin` once to install the pinned D3 asset. D3 is
+inlined into the output, so an existing canvas is fully offline. Semantic edges
+read QMD's internal SQLite vector layout best-effort; if that layout is missing
+or changes, link and tag edges still render.
+
+## Setup
+
+```sh
+scripts/install-codex-commands.sh
+npm install --prefix bin
+scripts/verify.sh
+```
+
+The installer makes the two checked-in skills available across repositories and
+adds deprecated custom-prompt aliases for Codex CLI/IDE compatibility. It does
+not overwrite existing commands.
+
+`$remember` runs `scripts/auto-commit.sh` for shared knowledge. This is the
+owner-sanctioned exception to ordinary commit discipline. The script regenerates
+indexes, runs the repository-owned publication and routing guard, stages only
+allowlisted shared paths, and commits without pushing. If the guard fails, it
+stops before staging.
+
+## License
+
+Brain is released under the [Apache License 2.0](LICENSE), identified by the
+SPDX expression `Apache-2.0`. See [NOTICE](NOTICE) for project attribution and
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for D3.js terms. Generated
+canvas files embed the D3.js license notice alongside the inlined library.

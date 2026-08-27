@@ -1,0 +1,10 @@
+{
+  "name": "brain-canvas-assets",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Scoped browser assets for the offline Brain canvas.",
+  "license": "Apache-2.0",
+  "dependencies": {
+    "d3": "7.9.0"
+  }
+}

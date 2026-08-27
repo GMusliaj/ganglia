@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 140" role="img" aria-labelledby="title description">
+  <title id="title">brain</title>
+  <desc id="description">Double link brackets surround one durable knowledge unit beside the brain wordmark.</desc>
+
+  <g fill="none" stroke="#cbd5e1" stroke-linecap="square" stroke-linejoin="miter" stroke-width="6">
+    <path d="M46 24H30v92h16"/>
+    <path d="M65 38H52v64h13"/>
+    <path d="M91 38h13v64H91"/>
+    <path d="M110 24h16v92h-16"/>
+  </g>
+  <circle cx="78" cy="70" r="7" fill="#60a5fa"/>
+
+  <text x="158" y="94" fill="#f8fafc"
+        font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+        font-size="68" font-weight="600" letter-spacing="-1.5">brain</text>
+</svg>
