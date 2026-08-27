@@ -5,6 +5,10 @@
   </picture>
 </h1>
 
+<p align="center">
+  <img src="docs/assets/brain-canvas-preview.png" alt="Brain shared knowledge canvas" width="1200">
+</p>
+
 Brain is a portable, cross-repository second brain: LLM agents distill durable
 knowledge into structured Markdown, retrieve it across projects, and keep
 personal or engagement-specific context local. It adapts [Karpathy's LLM Wiki

@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added a shared-only canvas preview to the README for the public repository.
 - Portable OKF-lite knowledge folders with generated shared and private
   navigation indexes.
 - Codex `remember` and `recall` skills for privacy-aware capture and tiered,
