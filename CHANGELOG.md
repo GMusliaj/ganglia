@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added a machine-onboarding guide for global skill symlinks, Codex MCP setup,
+  repository Python validation, and global `AGENTS.md` alignment.
 - Added a repository-owned Python virtual environment bootstrap with pinned
   development dependencies so skill validation runs reproducibly instead of
   being skipped when the system Python lacks PyYAML.
