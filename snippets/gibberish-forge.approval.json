@@ -1,0 +1,13 @@
+{
+  "approved_at": "2026-08-28",
+  "artifact_id": "gibberish-forge",
+  "base_revision": 2,
+  "bundle_digest": "sha256:bec5b3572a36f48118a8cf1c6b040438ef705eedc7211de1edb51bdb2d99ffb4",
+  "decision": "accepted",
+  "evidence_digest": "sha256:76b0f5a6cbe97b0d2856a84d8d4ab9389b6ca32e8a6efbbac27bc2680d16672f",
+  "id": "gibberish-forge-approval-2",
+  "kind": "human-approval",
+  "producer": "human",
+  "review_id": "gibberish-forge-review",
+  "schema_version": 1
+}

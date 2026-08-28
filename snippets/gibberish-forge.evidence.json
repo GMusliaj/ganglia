@@ -1,0 +1,38 @@
+{
+  "artifact_id": "gibberish-forge",
+  "bundle_digest": "sha256:bec5b3572a36f48118a8cf1c6b040438ef705eedc7211de1edb51bdb2d99ffb4",
+  "checks": [
+    {
+      "command": "compile payload source in memory",
+      "id": "python-syntax",
+      "result": "check ran and passed",
+      "status": "passed"
+    },
+    {
+      "command": "python3 snippets/gibberish-forge.py --help",
+      "id": "help-output",
+      "result": "check ran and passed",
+      "status": "passed"
+    },
+    {
+      "command": "python3 snippets/gibberish-forge.py --seed 0 --words 3",
+      "id": "focused-test",
+      "result": "check ran and passed",
+      "status": "passed"
+    },
+    {
+      "command": "python3 snippets/gibberish-forge.py --seed 42 --words 8",
+      "id": "representative-run",
+      "result": "check ran and passed",
+      "status": "passed"
+    }
+  ],
+  "evidence_digest": "sha256:76b0f5a6cbe97b0d2856a84d8d4ab9389b6ca32e8a6efbbac27bc2680d16672f",
+  "generated_at": "2026-08-28",
+  "id": "gibberish-forge-evidence-bec5b3572a36",
+  "kind": "verification-evidence",
+  "producer": "artifact-bundle",
+  "runtime": "python>=3.11",
+  "schema_version": 1,
+  "status": "verified"
+}
