@@ -21,6 +21,7 @@ repositories.
 
 ```text
 scripts/setup.sh              one-command local setup, Codex skills, QMD MCP, canvas dependency, verification
+scripts/setup-python.sh       create the ignored Python venv and install pinned development dependencies
 scripts/auto-commit.sh        reindex, lint, guard, and commit an allowlisted shared-memory change
 scripts/guard_shared.py       fail-closed publication and shared/local routing guard
 scripts/audit_public.py       read-only working-tree and reachable-history publication audit

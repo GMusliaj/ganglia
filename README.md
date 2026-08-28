@@ -274,14 +274,17 @@ if that layout is missing or changes, link and tag edges still render.
 ## Setup
 
 ```sh
-scripts/install-codex-commands.sh
-npm install --prefix bin
-scripts/verify.sh
+scripts/setup.sh
 ```
 
-The installer makes the two checked-in skills available across repositories and
-adds deprecated custom-prompt aliases for Codex CLI/IDE compatibility. It does
-not overwrite existing commands.
+Setup creates the ignored repository `.venv/`, installs the pinned Python
+development dependencies from `requirements-dev.txt`, installs the canvas
+dependency and Codex commands, and runs the complete verification gate. To
+refresh only the Python environment, run `scripts/setup-python.sh`.
+
+The command installer makes the two checked-in skills available across
+repositories and adds deprecated custom-prompt aliases for Codex CLI/IDE
+compatibility. It does not overwrite existing commands.
 
 `$remember` runs `scripts/auto-commit.sh` for shared knowledge. This is the
 owner-sanctioned exception to ordinary commit discipline. The script regenerates

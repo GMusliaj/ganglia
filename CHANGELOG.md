@@ -9,6 +9,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Added a repository-owned Python virtual environment bootstrap with pinned
+  development dependencies so skill validation runs reproducibly instead of
+  being skipped when the system Python lacks PyYAML.
 - Added a deterministic 20-case, schema-valid artifact evaluation gate covering
   materialization, review, verification, privacy, updates, protocol failures,
   and exact offline recall behavior.
