@@ -83,9 +83,20 @@ projector instead of paraphrasing or regenerating code:
 python3 bin/artifact_bundle.py recall --manifest <relative-manifest-path>
 ```
 
-Return its stdout exactly. It is three lines: relative payload path, stored
-invocation, and stored verification state. If the user explicitly asks for the
-code, add `--show-code` and return the stored bytes exactly.
+Return its stdout exactly. It is four lines: relative payload path, stored
+invocation, stored verification state, and the deterministic question
+`Run this stored invocation now? [yes/no]`. The question is an offer, not
+execution authorization; recall remains read-only and must stop for the user's
+answer. If the user explicitly asks for the code, add `--show-code` and return
+the stored bytes exactly without appending text to those bytes.
+
+An affirmative answer authorizes only the exact stored invocation that was
+shown. Before running it, project the manifest again with the applicable
+language, runtime, and applicability context so digest or compatibility drift
+fails closed. Run from the declared `artifact_working_directory`. A mutating
+artifact remains limited to its stored preview invocation; any non-preview or
+external mutation requires separate explicit authorization. A negative answer
+or no answer performs no action.
 
 An authoritative update keeps this manifest path stable while replacing its
 content-bound bundle and preserving prior rationale under `## Superseded`.

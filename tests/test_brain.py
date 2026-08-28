@@ -684,6 +684,7 @@ class ArtifactBundleTests(unittest.TestCase):
                         "snippets/normalize-text.py",
                         candidate["invocation"],
                         str(metadata["artifact_verification"]),
+                        "Run this stored invocation now? [yes/no]",
                         "",
                     ]
                 ),
@@ -1671,7 +1672,7 @@ class ArtifactEvalTests(unittest.TestCase):
             "review-agreement",
             "verification-calibration",
             "approval-binding",
-            "recall-three-fields",
+            "recall-run-offer",
             "recall-byte-exact",
             "authoritative-ranking",
             "context-mismatch",

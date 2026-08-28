@@ -293,12 +293,13 @@ def evaluate(assertion: str, context: Context) -> str:
         approval = approval_module.record_approval(evidence, review, "accepted")
         approval["bundle_digest"] = f"sha256:{'b' * 64}"
         return "reject-stale-approval" if expect_error(lambda: artifact.publish_bundle(root, plan, evidence, review, approval)) else "accepted-stale"
-    if assertion in {"recall-three-fields", "recall-byte-exact", "context-mismatch", "offline-read-only", "authoritative-ranking", "digest-mismatch"}:
+    if assertion in {"recall-run-offer", "recall-byte-exact", "context-mismatch", "offline-read-only", "authoritative-ranking", "digest-mismatch"}:
         plan = context.publish(root, scratch)
         manifest = Path("snippets/normalize-text.md")
-        if assertion == "recall-three-fields":
+        if assertion == "recall-run-offer":
             output = artifact.recall_bundle(root, manifest).decode("utf-8").splitlines()
-            return "exact-three-fields" if len(output) == 3 else "wrong-shape"
+            expected_offer = "Run this stored invocation now? [yes/no]"
+            return "exact-run-offer" if len(output) == 4 and output[-1] == expected_offer else "wrong-shape"
         if assertion == "recall-byte-exact":
             return "byte-exact" if artifact.recall_bundle(root, manifest, True) == PAYLOAD else "changed-bytes"
         if assertion == "authoritative-ranking":

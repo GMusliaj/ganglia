@@ -13,7 +13,7 @@
     {"id": "review-agreement", "category": "review", "assertion": "review-agreement", "expected_behavior": "agreement"},
     {"id": "verification-calibration", "category": "verification", "assertion": "verification-calibration", "expected_behavior": "reject-false-verified"},
     {"id": "approval-binding", "category": "verification", "assertion": "approval-binding", "expected_behavior": "reject-stale-approval"},
-    {"id": "recall-three-fields", "category": "retrieval", "assertion": "recall-three-fields", "expected_behavior": "exact-three-fields"},
+    {"id": "recall-run-offer", "category": "retrieval", "assertion": "recall-run-offer", "expected_behavior": "exact-run-offer"},
     {"id": "recall-byte-exact", "category": "retrieval", "assertion": "recall-byte-exact", "expected_behavior": "byte-exact"},
     {"id": "authoritative-ranking", "category": "retrieval", "assertion": "authoritative-ranking", "expected_behavior": "authoritative"},
     {"id": "context-mismatch", "category": "retrieval", "assertion": "context-mismatch", "expected_behavior": "incompatible"},

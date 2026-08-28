@@ -49,6 +49,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Refreshed the README canvas screenshot against the current shared-only live
+  interface and knowledge graph.
+- Made exact artifact recall deterministically ask whether to run the stored
+  invocation while preserving read-only recall and separate execution approval.
 - Made authoritative artifact revisions update one bundle in place, preserve
   superseded rationale, and require fresh content-bound review, verification,
   and approval before recall accepts the new bytes.

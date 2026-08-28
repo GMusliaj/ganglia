@@ -152,11 +152,14 @@ For an exact artifact match, recall uses the read-only projector:
 python3 bin/artifact_bundle.py recall --manifest snippets/example.md
 ```
 
-Its default output is exactly the stored payload path, invocation, and
-verification state. `--show-code` returns the stored payload bytes unchanged.
-The projector checks the bundle digest first and never executes, adapts, or
-writes the artifact. Optional language, runtime, and applicability context
-returns one incompatibility statement instead of mismatched or adapted code.
+Its default output is exactly the stored payload path, invocation, verification
+state, and a deterministic yes/no offer to run that invocation. The offer does
+not execute anything; an affirmative response is a separate action and applies
+only to the exact invocation shown. `--show-code` returns the stored payload
+bytes unchanged. The projector checks the bundle digest first and never
+executes, adapts, or writes the artifact. Optional language, runtime, and
+applicability context returns one incompatibility statement instead of
+mismatched or adapted code.
 
 The deterministic acceptance corpus uses schema-valid JSON inputs and results:
 
@@ -165,7 +168,7 @@ python3 scripts/eval_artifacts.py --output /tmp/artifact-eval-result.json
 ```
 
 It checks eligibility, language choice, complete manifests, safety and privacy,
-updates, review/evidence/approval binding, exact minimal recall, offline
+updates, review/evidence/approval binding, deterministic run offers, offline
 read-only behavior, and fail-closed protocol cases. `scripts/verify.sh` runs the
 same gate automatically.
 

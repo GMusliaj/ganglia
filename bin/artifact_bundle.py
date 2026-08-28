@@ -1293,6 +1293,7 @@ def recall_bundle(
             payload_relative.as_posix(),
             str(metadata["artifact_invocation"]),
             str(metadata["artifact_verification"]),
+            "Run this stored invocation now? [yes/no]",
         ]
     )
     return f"{output}\n".encode("utf-8")
