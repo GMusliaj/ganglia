@@ -1,0 +1,89 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "FAFO experiment result",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "experiment_id",
+    "plan_digest",
+    "terminal_state",
+    "actions",
+    "observations",
+    "postcondition",
+    "reconciliation",
+    "rollback",
+    "conclusion",
+    "remaining_uncertainty"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "kind": {"type": "string", "const": "fafo-result"},
+    "experiment_id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "plan_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "terminal_state": {
+      "type": "string",
+      "enum": [
+        "verified",
+        "falsified",
+        "inconclusive",
+        "authorization-blocked",
+        "safety-blocked",
+        "superseded"
+      ]
+    },
+    "actions": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "summary", "status", "evidence"],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+          "summary": {"type": "string", "minLength": 1},
+          "status": {"type": "string", "enum": ["passed", "failed", "indeterminate"]},
+          "evidence": {"type": "string", "minLength": 1}
+        }
+      }
+    },
+    "observations": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {"type": "string", "minLength": 1}
+    },
+    "postcondition": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "evidence"],
+      "properties": {
+        "status": {"type": "string", "enum": ["passed", "failed", "not-run"]},
+        "evidence": {"type": "string", "minLength": 1}
+      }
+    },
+    "reconciliation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "evidence"],
+      "properties": {
+        "status": {"type": "string", "enum": ["not-needed", "completed", "required"]},
+        "evidence": {"type": "string", "minLength": 1}
+      }
+    },
+    "rollback": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["status", "evidence"],
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": ["not-needed", "restored", "preserved-requested-change", "failed"]
+        },
+        "evidence": {"type": "string", "minLength": 1}
+      }
+    },
+    "conclusion": {"type": "string", "minLength": 1},
+    "remaining_uncertainty": {"type": "string", "minLength": 1}
+  }
+}

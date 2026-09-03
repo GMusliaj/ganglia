@@ -1,0 +1,215 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="icon" type="image/svg+xml" href="data:image/svg+xml;base64,__FAVICON__">
+  <title>Ganglia canvas</title>
+  <style>
+    :root {
+      color-scheme: light dark;
+      --background: #f4f6f7; --surface: #ffffff; --surface-raised: #ffffff;
+      --foreground: #172126; --muted-foreground: #5b6970; --border: #d7dee1;
+      --control-hover: #eef2f3; --primary: #0f766e; --primary-soft: #dff1ee;
+      --pattern: #0f766e; --concept: #2563a6; --decision: #a16207;
+      --session: #7651a8; --source: #64748b; --tag: #687783; --semantic: #9a6b22;
+      --on-primary: #ffffff; --shadow: 0 16px 40px rgb(28 39 45 / 14%); --shadow-small: 0 8px 22px rgb(28 39 45 / 11%);
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --background: #101416; --surface: #161b1e; --surface-raised: #1c2326;
+        --foreground: #edf2f3; --muted-foreground: #aab6bb; --border: #39454a;
+        --control-hover: #232b2f; --primary: #63c9bc; --primary-soft: #173d39;
+        --pattern: #63c9bc; --concept: #79afe8; --decision: #d6aa60;
+        --session: #b89cde; --source: #a3afb5; --tag: #a3afb5; --semantic: #d6aa60;
+        --on-primary: #0b1b19; --shadow: 0 20px 48px rgb(0 0 0 / 38%); --shadow-small: 0 10px 28px rgb(0 0 0 / 30%);
+      }
+    }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    html, body { min-width: 320px; min-height: 100%; overflow: hidden; }
+    body { margin: 0; background: var(--background); color: var(--foreground); font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    button, input, summary { font: inherit; } button, input { color: inherit; }
+    button { cursor: pointer; touch-action: manipulation; }
+    svg { display: block; }
+    .icon-sprite { position: absolute; width: 0; height: 0; overflow: hidden; }
+    .ui-icon { width: 17px; height: 17px; flex: none; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+    .shell { height: 100dvh; display: grid; grid-template-rows: auto minmax(0, 1fr); }
+    .topbar { min-height: 64px; display: grid; grid-template-columns: minmax(280px, 1fr) minmax(280px, 520px) minmax(220px, 1fr); align-items: center; gap: 20px; padding: 10px 16px; border-bottom: 1px solid var(--border); background: var(--surface); position: relative; z-index: 40; }
+    .brand-nav { min-width: 0; display: flex; align-items: center; gap: 10px; }
+    .identity { display: flex; align-items: center; gap: 9px; min-width: 0; }
+    .identity-logo { display: block; width: 92px; height: auto; flex: none; color: var(--foreground); }
+    .identity-copy { min-width: 0; }
+    .identity h1 { margin: 0; font-size: 15px; line-height: 1.2; font-weight: 650; }
+    .identity p { margin: 2px 0 0; color: var(--muted-foreground); font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .toolbar { display: flex; align-items: center; justify-content: flex-end; gap: 8px; }
+    .button, .menu summary, .open-link { min-width: 44px; min-height: 44px; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 0 12px; border: 1px solid var(--border); border-radius: 9px; background: var(--surface); color: var(--foreground); text-decoration: none; font-weight: 550; transition: background-color 150ms ease, border-color 150ms ease, transform 100ms ease; }
+    .button:hover, .menu summary:hover, .open-link:hover { background: var(--control-hover); }
+    .button:active, .menu summary:active, .open-link:active { transform: translateY(1px); }
+    .button .ui-icon, .menu summary .ui-icon, .open-link .ui-icon { width: 17px; height: 17px; }
+    .button.icon-only { width: 44px; padding: 0; }
+    .button.quiet { border-color: transparent; background: transparent; color: var(--muted-foreground); }
+    .button.quiet:hover { background: var(--control-hover); color: var(--foreground); }
+    .topbar .button, .topbar .menu summary { border-color: transparent; background: transparent; }
+    .topbar .button:hover, .topbar .menu summary:hover, .topbar .menu[open] summary { background: var(--control-hover); border-color: transparent; }
+    .topbar #library-toggle[aria-expanded="true"] { background: var(--primary-soft); color: var(--foreground); }
+    .button:focus-visible, .search:focus-visible, .search-clear:focus-visible, .menu summary:focus-visible, .open-link:focus-visible, .library-row:focus-visible, .session-row:focus-visible, .relation-row:focus-visible, .search-result:focus-visible { outline: 3px solid var(--primary); outline-offset: 2px; }
+    .mobile-details { display: none; }
+    .search-wrap { position: relative; width: 100%; }
+    .search-icon { position: absolute; left: 13px; top: 14px; width: 16px; height: 16px; color: var(--muted-foreground); pointer-events: none; }
+    .search { width: 100%; min-width: 0; height: 44px; padding: 0 40px; border: 1px solid var(--border); border-radius: 9px; background: var(--background); outline: none; }
+    .search:focus { border-color: var(--primary); background: var(--surface); box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 14%, transparent); }
+    .search::placeholder { color: var(--muted-foreground); } .search::-webkit-search-cancel-button { display: none; }
+    .search-clear { position: absolute; right: 4px; top: 4px; width: 36px; height: 36px; display: grid; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--muted-foreground); }
+    .search-clear:hover { background: var(--control-hover); color: var(--foreground); }
+    .search-results { position: absolute; top: 52px; left: 0; right: 0; z-index: 70; overflow: hidden; border: 1px solid var(--border); border-radius: 11px; background: var(--surface-raised); box-shadow: var(--shadow); }
+    .search-summary { padding: 10px 12px 7px; color: var(--muted-foreground); font-size: 12px; border-bottom: 1px solid var(--border); }
+    .search-result { width: 100%; min-height: 52px; display: grid; grid-template-columns: 10px minmax(0, 1fr) auto; align-items: center; gap: 10px; padding: 8px 12px; border: 0; border-radius: 0; text-align: left; background: transparent; color: var(--foreground); }
+    .search-result:hover, .search-result.is-active { background: var(--control-hover); }
+    .search-result-main { min-width: 0; } .search-result-main strong, .search-result-main small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .search-result-main strong { font-weight: 600; } .search-result-main small, .search-result-kind { color: var(--muted-foreground); font-size: 11px; }
+    .search-empty { margin: 0; padding: 18px 12px; color: var(--muted-foreground); }
+    .menu { position: relative; }
+    .menu summary { list-style: none; cursor: pointer; user-select: none; } .menu summary::-webkit-details-marker { display: none; }
+    .menu[open] summary { background: var(--control-hover); border-color: var(--primary); }
+    .menu-panel { position: absolute; right: 0; top: 52px; width: 268px; padding: 10px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface-raised); box-shadow: var(--shadow); z-index: 60; }
+    .menu-panel h2 { margin: 2px 4px 8px; font-size: 14px; } .menu-panel > p { margin: 0 4px 12px; color: var(--muted-foreground); font-size: 12px; }
+    .layer-control { min-height: 48px; display: grid; grid-template-columns: 20px 1fr auto; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 8px; cursor: pointer; }
+    .layer-control:hover { background: var(--control-hover); } .layer-control input { width: 17px; height: 17px; margin: 0; accent-color: var(--primary); }
+    .layer-control span, .layer-control small { display: block; } .layer-control small { color: var(--muted-foreground); font-size: 11px; }
+    .edge-sample { width: 22px; height: 0; border-top: 2px solid var(--tag); } .edge-sample.tag { border-top-style: dotted; border-top-color: var(--primary); } .edge-sample.semantic { border-top-style: dashed; border-top-color: var(--semantic); }
+    .help-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; padding-top: 12px; border-top: 1px solid var(--border); }
+    .help-tip { padding: 9px; border-radius: 8px; background: var(--control-hover); } .help-tip strong, .help-tip span { display: block; } .help-tip span { margin-top: 2px; color: var(--muted-foreground); font-size: 11px; }
+    .menu-section-title { margin: 14px 4px 0; padding-top: 12px; border-top: 1px solid var(--border); color: var(--muted-foreground); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+    .workspace { position: relative; min-height: 0; display: grid; grid-template-columns: 260px minmax(0, 1fr) 340px; transition: grid-template-columns 220ms cubic-bezier(.2, .8, .2, 1); }
+    .workspace.library-collapsed { grid-template-columns: 0 minmax(0, 1fr) 340px; }
+    .library, .inspector-panel { min-width: 0; background: var(--surface); overflow: hidden; }
+    .library { border-right: 1px solid var(--border); transition: opacity 160ms ease, transform 220ms cubic-bezier(.2, .8, .2, 1); }
+    .workspace.library-collapsed .library { opacity: 0; transform: translateX(-20px); pointer-events: none; }
+    .inspector-panel { border-left: 1px solid var(--border); display: flex; flex-direction: column; }
+    .panel-heading { min-height: 68px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 13px 16px; border-bottom: 1px solid var(--border); }
+    .panel-heading h2 { margin: 0; font-size: 14px; font-weight: 650; } .panel-heading p { margin: 2px 0 0; color: var(--muted-foreground); font-size: 12px; }
+    .library-scroll, .inspector-scroll { overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+    .library-scroll { height: calc(100% - 68px); padding: 16px 10px 28px; }
+    .library-section { margin-bottom: 24px; }
+    .library-section h3, .inspector-section h3 { margin: 0 9px 8px; color: var(--muted-foreground); font-size: 11px; font-weight: 650; text-transform: uppercase; letter-spacing: .08em; }
+    .library-row, .session-row, .relation-row { width: 100%; border: 0; background: transparent; color: var(--foreground); text-align: left; border-radius: 8px; transition: background-color 140ms ease, color 140ms ease; }
+    .library-row { min-height: 44px; display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 7px 10px; }
+    .library-row > span { min-width: 0; display: flex; align-items: center; gap: 9px; } .library-row small { color: var(--muted-foreground); font-variant-numeric: tabular-nums; }
+    .library-row:hover, .session-row:hover, .relation-row:hover { background: var(--control-hover); }
+    .library-row.is-active { background: var(--primary-soft); color: var(--foreground); font-weight: 600; }
+    .category-dot, .relation-dot, .legend-mark { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--source); flex: none; }
+    .session-row { display: block; min-height: 48px; padding: 8px 10px; margin-bottom: 2px; } .session-row span, .session-row small { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .session-row small { margin-top: 2px; color: var(--muted-foreground); font-size: 11px; } .session-row.search-hidden { display: none; }
+    .library-empty { margin: 8px; padding: 12px; color: var(--muted-foreground); font-size: 12px; background: var(--control-hover); border-radius: 8px; }
+    .library-empty strong, .library-empty span { display: block; } .library-empty strong { color: var(--foreground); margin-bottom: 3px; }
+    .graph-wrap { position: relative; min-width: 0; overflow: hidden; background: var(--background); isolation: isolate; }
+    .graph-wrap::before { content: ""; position: absolute; inset: 0; pointer-events: none; background-image: radial-gradient(var(--border) .7px, transparent .7px); background-size: 22px 22px; opacity: .28; }
+    #graph { position: relative; z-index: 1; display: block; width: 100%; height: 100%; min-height: 540px; touch-action: none; }
+    .edge { stroke: var(--tag); stroke-width: 1; opacity: .34; vector-effect: non-scaling-stroke; transition: opacity 160ms ease, stroke-width 160ms ease; }
+    .edge.tag { stroke: var(--primary); stroke-dasharray: 2 5; opacity: .3; } .edge.semantic { stroke: var(--semantic); stroke-dasharray: 8 7; opacity: .27; }
+    .edge.unrelated { opacity: .035; } .edge.connected { opacity: .82; stroke-width: 1.8; }
+    .node { cursor: pointer; outline: none; transition: opacity 160ms ease; } .node.dragging { cursor: grabbing; }
+    .node .hit-area { fill: transparent; stroke: none; pointer-events: all; } .node path { stroke: var(--background); stroke-width: 2; vector-effect: non-scaling-stroke; transition: stroke-width 150ms ease, filter 150ms ease, opacity 150ms ease; }
+    .node text, .static-node text { fill: var(--foreground); font-size: 12px; font-weight: 550; paint-order: stroke; stroke: var(--background); stroke-width: 5px; stroke-linejoin: round; pointer-events: none; }
+    .node text { opacity: 0; transition: opacity 140ms ease; } .node.prominent text, .node:hover text, .node:focus text, .node.selected text, .node.match text { opacity: 1; }
+    .node.dimmed, .node.unrelated { opacity: .13; } .node.filtered { display: none; } .node.connected { opacity: 1; }
+    .node.match path { stroke: var(--foreground); stroke-width: 3; } .node.selected path, .node:focus-visible path { stroke: var(--foreground); stroke-width: 4; filter: drop-shadow(0 3px 6px rgb(0 0 0 / 18%)); }
+    .static-node circle, .static-node rect, .static-node path { stroke: var(--background); stroke-width: 2; } .static-empty { fill: var(--muted-foreground); }
+    .graph-controls { position: absolute; z-index: 7; right: 16px; bottom: 16px; display: flex; gap: 6px; padding: 5px; border: 1px solid var(--border); border-radius: 11px; background: var(--surface); box-shadow: var(--shadow-small); }
+    .graph-controls .button { min-width: 38px; min-height: 38px; width: 38px; border: 0; padding: 0; }
+    .status { position: absolute; z-index: 5; left: 18px; bottom: 18px; display: flex; align-items: center; gap: 8px; color: var(--muted-foreground); font-size: 12px; pointer-events: none; }
+    .status::before { content: ""; width: 6px; height: 6px; border-radius: 50%; background: var(--primary); }
+    .node-tooltip { position: absolute; z-index: 12; max-width: 260px; padding: 8px 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--surface-raised); box-shadow: var(--shadow-small); pointer-events: none; }
+    .node-tooltip strong, .node-tooltip span { display: block; } .node-tooltip strong { font-size: 12px; } .node-tooltip span { color: var(--muted-foreground); font-size: 11px; }
+    .inspector-scroll { padding: 18px; height: 100%; }
+    .inspector-empty { display: grid; place-items: center; min-height: 56%; text-align: center; color: var(--muted-foreground); }
+    .empty-icon { width: 46px; height: 46px; display: grid; place-items: center; margin: 0 auto 12px; border-radius: 12px; background: var(--primary-soft); color: var(--primary); } .empty-icon svg { width: 23px; height: 23px; }
+    .inspector-empty h3 { margin: 0; color: var(--foreground); font-size: 16px; } .inspector-empty p { max-width: 26ch; margin: 6px auto 0; }
+    .empty-shortcuts { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 16px; text-align: left; } .empty-shortcuts span { padding: 9px; border-radius: 8px; background: var(--control-hover); font-size: 11px; }
+    .detail-content { opacity: 0; transform: translateY(6px); visibility: hidden; height: 0; overflow: hidden; transition: opacity 180ms ease, transform 220ms cubic-bezier(.2, .8, .2, 1); }
+    .detail-content.is-visible { opacity: 1; transform: none; visibility: visible; height: auto; overflow: visible; }
+    .detail-actions { display: flex; align-items: center; justify-content: space-between; margin: -4px 0 12px; }
+    .detail-kind { margin: 0 0 6px; color: var(--muted-foreground); font-size: 11px; text-transform: uppercase; letter-spacing: .08em; }
+    .detail-content h2 { margin: 0; font-size: 19px; line-height: 1.35; font-weight: 650; overflow-wrap: anywhere; }
+    .detail-description { margin: 10px 0; color: var(--muted-foreground); } .detail-path { margin: 8px 0; color: var(--muted-foreground); font: 11px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+    .detail-meta { display: flex; gap: 6px; flex-wrap: wrap; margin: 12px 0; } .badge { padding: 4px 8px; border-radius: 999px; background: var(--control-hover); color: var(--muted-foreground); font-size: 11px; }
+    .source-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 2px; }
+    .source-actions .open-link { margin: 0; }
+    .open-link.primary { border-color: var(--primary); background: var(--primary); color: var(--on-primary); }
+    .open-link.primary:hover { background: color-mix(in srgb, var(--primary) 88%, var(--foreground)); }
+    .inspector-section { padding-top: 18px; margin-top: 18px; border-top: 1px solid var(--border); } .inspector-section h3 { margin-left: 0; }
+    .relation-group { margin-top: 14px; } .relation-group h4 { margin: 0 0 5px; color: var(--muted-foreground); font-size: 12px; font-weight: 600; }
+    .relation-row { display: grid; grid-template-columns: 9px minmax(0, 1fr) auto; align-items: center; gap: 9px; min-height: 44px; padding: 6px 8px; }
+    .relation-row span:nth-child(2) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } .relation-row small { color: var(--muted-foreground); font-size: 10px; }
+    .relations-empty { color: var(--muted-foreground); font-size: 12px; }
+    .legend-list { display: grid; gap: 9px; margin-top: 12px; } .legend-item { display: grid; grid-template-columns: 18px 1fr; align-items: center; gap: 9px; color: var(--muted-foreground); font-size: 12px; }
+    .legend-mark { width: 10px; height: 10px; justify-self: center; } .legend-mark.session { border-radius: 3px; } .legend-mark.tag { transform: rotate(45deg); border-radius: 1px; }
+    .legend-line { width: 18px; height: 0; border-top: 2px solid var(--tag); } .legend-line.tag-edge { border-top-style: dotted; border-top-color: var(--primary); } .legend-line.semantic { border-top-style: dashed; border-top-color: var(--semantic); }
+    .pattern { background: var(--pattern); } .concept { background: var(--concept); } .decision { background: var(--decision); } .session { background: var(--session); } .source { background: var(--source); } .tag { background: var(--tag); }
+    .static-node.pattern circle { fill: var(--pattern); } .static-node.concept circle { fill: var(--concept); } .static-node.decision circle { fill: var(--decision); } .static-node.session rect { fill: var(--session); } .static-node.tag path { fill: var(--tag); }
+    .sidebar-scrim { display: none; }
+    .sr-only { position: absolute !important; width: 1px !important; height: 1px !important; padding: 0 !important; margin: -1px !important; overflow: hidden !important; clip: rect(0, 0, 0, 0) !important; white-space: nowrap !important; border: 0 !important; }
+    @media (max-width: 1120px) {
+      .workspace { grid-template-columns: 226px minmax(0, 1fr) 300px; } .workspace.library-collapsed { grid-template-columns: 0 minmax(0, 1fr) 300px; }
+      .topbar { grid-template-columns: minmax(190px, .8fr) minmax(240px, 1.4fr) auto; gap: 12px; }
+      .identity p, .button-label.optional { display: none; }
+    }
+    @media (max-width: 820px) {
+      html, body { overflow: auto; } .shell { min-height: 100dvh; height: auto; grid-template-rows: auto minmax(620px, 1fr); }
+      .topbar { grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; padding: 8px 12px 10px; } .brand-nav { min-width: 0; } .identity-logo { width: 80px; } .identity p { display: none; }
+      .search-wrap { grid-column: 1 / -1; grid-row: 2; min-width: 0; } .search { font-size: 16px; }
+      .toolbar { grid-column: 2; grid-row: 1; }
+      .menu summary .button-label { display: none; } .menu summary { width: 44px; padding: 0; } .menu-panel { right: -48px; }
+      .mobile-details { display: inline-flex; } .desktop-label { display: none; }
+      .workspace, .workspace.library-collapsed { min-height: 620px; grid-template-columns: 1fr; }
+      .library, .inspector-panel { position: absolute; top: 0; bottom: 0; width: min(90vw, 340px); z-index: 30; box-shadow: var(--shadow); transition: transform 220ms cubic-bezier(.2, .8, .2, 1), opacity 180ms ease; }
+      .library { left: 0; transform: translateX(-105%); opacity: 0; } .inspector-panel { right: 0; transform: translateX(105%); opacity: 0; }
+      .workspace.library-open .library, .workspace.inspector-open .inspector-panel { transform: none; opacity: 1; } .workspace.library-collapsed .library { transform: translateX(-105%); }
+      .sidebar-scrim { position: absolute; inset: 0; z-index: 25; border: 0; background: rgb(8 12 14 / 38%); backdrop-filter: blur(2px); }
+      .workspace.library-open .sidebar-scrim, .workspace.inspector-open .sidebar-scrim { display: block; }
+      .node.prominent text { opacity: 0; } .node.selected text, .node:focus text, .node.match text { opacity: 1; }
+      .graph-controls { right: 12px; bottom: 12px; } .status { left: 12px; bottom: 68px; }
+      .search-results { position: fixed; top: 116px; left: 12px; right: 12px; }
+    }
+    @media (max-width: 360px) { .identity-copy { display: none; } .identity-logo { width: 72px; } }
+    @media (prefers-reduced-motion:reduce) { * { scroll-behavior: auto !important; transition-duration: .01ms !important; animation-duration: .01ms !important; } }
+  </style>
+</head>
+<body>
+  <svg class="icon-sprite" aria-hidden="true">
+    <symbol id="icon-panel-left" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M9.5 4v16"/></symbol>
+    <symbol id="icon-panel-right" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="16" rx="2"/><path d="M14.5 4v16"/></symbol>
+    <symbol id="icon-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="6.5"/><path d="m16 16 4 4"/></symbol>
+    <symbol id="icon-sliders" viewBox="0 0 24 24"><path d="M4 7h10M18 7h2M4 17h2M10 17h10M14 4v6M6 14v6"/></symbol>
+    <symbol id="icon-help" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M9.8 9a2.3 2.3 0 1 1 3.2 2.1c-.7.4-1 1-1 1.9M12 17.2v.1"/></symbol>
+    <symbol id="icon-minus" viewBox="0 0 24 24"><path d="M6 12h12"/></symbol>
+    <symbol id="icon-plus" viewBox="0 0 24 24"><path d="M12 6v12M6 12h12"/></symbol>
+    <symbol id="icon-fit" viewBox="0 0 24 24"><path d="M9 4H4v5M15 4h5v5M9 20H4v-5M15 20h5v-5"/></symbol>
+    <symbol id="icon-close" viewBox="0 0 24 24"><path d="m7 7 10 10M17 7 7 17"/></symbol>
+    <symbol id="icon-focus" viewBox="0 0 24 24"><circle cx="12" cy="12" r="3" fill="currentColor" stroke="none"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3"/></symbol>
+    <symbol id="icon-back" viewBox="0 0 24 24"><path d="m14 6-6 6 6 6"/></symbol>
+    <symbol id="icon-file-code" viewBox="0 0 24 24"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9Z"/><path d="M14 3v6h6M10 13l-2 2 2 2M14 13l2 2-2 2"/></symbol>
+    <symbol id="icon-external" viewBox="0 0 24 24"><path d="M14 5h5v5M19 5l-8 8M18 13v5a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/></symbol>
+  </svg>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand-nav"><div class="identity"><svg class="identity-logo" viewBox="0 0 500 140" role="img" aria-labelledby="ganglia-brand-title ganglia-brand-description"><title id="ganglia-brand-title">Ganglia</title><desc id="ganglia-brand-description">Connected nodes form a ganglion with branching paths beside the Ganglia wordmark.</desc><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="5"><path d="M61 50 40 35H20"/><path d="M51 78H18"/><path d="M77 86 43 108H23"/><path d="M61 50 51 78l26 8 11-27-27-9Z"/><path d="m88 59 20-24h20"/><path d="m88 59 23 16h23"/><path d="m77 86 28 22h23"/></g><g fill="currentColor"><circle cx="20" cy="35" r="4.5"/><circle cx="18" cy="78" r="4.5"/><circle cx="23" cy="108" r="4.5"/><circle cx="128" cy="35" r="4.5"/><circle cx="134" cy="75" r="4.5"/><circle cx="128" cy="108" r="4.5"/></g><g fill="var(--primary)"><circle cx="61" cy="50" r="8"/><circle cx="51" cy="78" r="8"/><circle cx="77" cy="86" r="8"/><circle cx="88" cy="59" r="8"/></g><text x="158" y="94" fill="currentColor" font-family="Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="68" font-weight="600" letter-spacing="-1.5">ganglia</text></svg><div class="identity-copy"><h1>Canvas</h1><p id="scope-label">__SCOPE_LABEL__</p></div></div><button class="button" id="library-toggle" type="button" aria-label="Toggle library" aria-controls="library" aria-expanded="true"><svg class="ui-icon" aria-hidden="true"><use href="#icon-panel-left"/></svg><span class="button-label optional">Library</span></button></div>
+      <div class="search-wrap"><label class="sr-only" for="search">Search titles, paths, tags, and sessions</label><svg class="ui-icon search-icon" aria-hidden="true"><use href="#icon-search"/></svg><input class="search" id="search" type="search" role="combobox" aria-autocomplete="list" placeholder="Search knowledge and sessions" autocomplete="off" aria-controls="search-result-list" aria-expanded="false"><button class="search-clear" id="search-clear" type="button" aria-label="Clear search" hidden><svg class="ui-icon" aria-hidden="true"><use href="#icon-close"/></svg></button><div class="search-results" id="search-results" hidden><div class="search-summary" id="search-summary"></div><div id="search-result-list" role="listbox" aria-label="Search results"></div></div></div>
+      <div class="toolbar" aria-label="Canvas controls">
+        <details class="menu connection-menu" id="connection-menu"><summary><svg class="ui-icon" aria-hidden="true"><use href="#icon-sliders"/></svg><span class="button-label optional">Connections</span></summary><div class="menu-panel" aria-label="Visible connection types"><h2>Connection layers</h2><p>Choose which relationships appear on the map.</p><label class="layer-control"><input id="layer-link" type="checkbox" checked><span>Markdown links<small>Explicit references</small></span><i class="edge-sample"></i></label><label class="layer-control"><input id="layer-tag" type="checkbox" checked><span>Tag membership<small>Shared taxonomy</small></span><i class="edge-sample tag"></i></label><label class="layer-control"><input id="layer-semantic" type="checkbox" checked><span>Semantic similarity<small>Best-effort QMD layer</small></span><i class="edge-sample semantic"></i></label></div></details>
+        <details class="menu help-menu" id="help-menu"><summary aria-label="How to use the knowledge map"><svg class="ui-icon" aria-hidden="true"><use href="#icon-help"/></svg><span class="button-label optional">Help</span></summary><div class="menu-panel"><h2>How to explore</h2><p>Select a node to highlight its immediate neighborhood and inspect every linked item.</p><div class="help-grid"><div class="help-tip"><strong>Click</strong><span>Inspect a node</span></div><div class="help-tip"><strong>Drag</strong><span>Reposition a node</span></div><div class="help-tip"><strong>Scroll</strong><span>Zoom the map</span></div><div class="help-tip"><strong>Double-click</strong><span>Open in VS Code</span></div></div><h3 class="menu-section-title">Map key</h3><div class="legend-list"><div class="legend-item"><i class="legend-mark pattern"></i><span>Pattern</span></div><div class="legend-item"><i class="legend-mark concept"></i><span>Concept</span></div><div class="legend-item"><i class="legend-mark decision"></i><span>Decision</span></div><div class="legend-item"><i class="legend-mark session"></i><span>Codex session</span></div><div class="legend-item"><i class="legend-mark tag"></i><span>Tag</span></div><div class="legend-item"><i class="legend-line"></i><span>Markdown link</span></div><div class="legend-item"><i class="legend-line tag-edge"></i><span>Tag membership</span></div><div class="legend-item"><i class="legend-line semantic"></i><span>Semantic similarity</span></div></div></div></details>
+        <button class="button icon-only mobile-details" id="details-toggle" type="button" aria-label="Show details panel" aria-controls="inspector" aria-expanded="false"><svg class="ui-icon" aria-hidden="true"><use href="#icon-panel-right"/></svg></button>
+      </div>
+    </header>
+    <div class="workspace" id="workspace">
+      __LIBRARY__
+      <section class="graph-wrap" aria-label="Interactive Ganglia knowledge graph"><svg id="graph" viewBox="0 0 1200 760" role="group" aria-labelledby="graph-title graph-desc"><title id="graph-title">Ganglia knowledge graph</title><desc id="graph-desc">Circles are durable knowledge, rounded squares are Codex sessions, and diamonds are tags. Select a node to inspect linked knowledge.</desc>__STATIC_GRAPH__</svg><div class="node-tooltip" id="node-tooltip" role="tooltip" hidden><strong id="tooltip-title"></strong><span id="tooltip-meta"></span></div><div class="status" id="counts" role="status" aria-live="polite">__INITIAL_STATUS__</div><div class="graph-controls" aria-label="Map navigation"><button class="button" id="zoom-out" type="button" aria-label="Zoom out" title="Zoom out"><svg class="ui-icon" aria-hidden="true"><use href="#icon-minus"/></svg></button><button class="button" id="zoom-in" type="button" aria-label="Zoom in" title="Zoom in"><svg class="ui-icon" aria-hidden="true"><use href="#icon-plus"/></svg></button><button class="button" id="fit" type="button" aria-label="Fit all nodes" title="Fit all nodes"><svg class="ui-icon" aria-hidden="true"><use href="#icon-fit"/></svg></button></div></section>
+      <aside class="inspector-panel" id="inspector" aria-label="Node details"><div class="panel-heading"><div><h2>Details</h2><p id="inspector-subtitle">Selection and relationships</p></div><button class="button icon-only quiet" id="clear-selection" type="button" aria-label="Clear selection" title="Clear selection" hidden><svg class="ui-icon" aria-hidden="true"><use href="#icon-close"/></svg></button></div><div class="inspector-scroll"><div class="inspector-empty" id="inspector-empty"><div><span class="empty-icon"><svg class="ui-icon" aria-hidden="true"><use href="#icon-focus"/></svg></span><h3>Nothing selected</h3><p>Choose a node on the map to see what it means and how it connects.</p><div class="empty-shortcuts"><span><strong>Search</strong><br>Jump to a topic</span><span><strong>Library</strong><br>Filter by type</span></div></div></div><div class="detail-content" id="detail-content" aria-live="polite"><div class="detail-actions"><button class="button quiet" id="back-selection" type="button" hidden><svg class="ui-icon" aria-hidden="true"><use href="#icon-back"/></svg><span>Back</span></button></div><p class="detail-kind" id="detail-kind"></p><h2 id="detail-title"></h2><p class="detail-description" id="detail-description"></p><p class="detail-path" id="detail-path"></p><div class="detail-meta" id="detail-tags"></div><div class="source-actions"><a class="open-link primary" id="detail-editor" hidden><svg class="ui-icon" aria-hidden="true"><use href="#icon-file-code"/></svg><span>Open in VS Code</span></a><a class="open-link" id="detail-open" hidden><svg class="ui-icon" aria-hidden="true"><use href="#icon-external"/></svg><span>Open file</span></a></div><section class="inspector-section"><h3 id="relations-heading">Linked knowledge</h3><div id="relations"></div></section></div></div></aside>
+      <button class="sidebar-scrim" id="sidebar-scrim" type="button" aria-label="Close side panel"></button>
+    </div>
+  </main>
+  <script>__D3_SOURCE__</script>
+  <script>__CANVAS_JS__</script>
+</body>
+</html>

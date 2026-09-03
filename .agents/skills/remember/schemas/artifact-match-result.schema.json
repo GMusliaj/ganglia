@@ -1,0 +1,64 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.invalid/ganglia/artifact-match-result.schema.json",
+  "title": "Ganglia artifact match result",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "kind",
+    "status",
+    "scope",
+    "query_artifact_id",
+    "candidates"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "kind": {"type": "string", "const": "artifact-match-result"},
+    "status": {
+      "type": "string",
+      "enum": ["no-match", "authoritative", "ambiguous"]
+    },
+    "scope": {"type": "string", "enum": ["shared", "local-and-shared"]},
+    "query_artifact_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+    },
+    "selected_manifest": {"type": "string", "minLength": 1},
+    "candidates": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "manifest",
+          "artifact_id",
+          "identity_match",
+          "applicability_matches",
+          "lexical_score",
+          "semantic_candidate",
+          "ready"
+        ],
+        "properties": {
+          "manifest": {"type": "string", "minLength": 1},
+          "artifact_id": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"
+          },
+          "identity_match": {"type": "boolean"},
+          "applicability_matches": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": ["language", "runtime", "safety", "inputs", "outputs", "applicability"]
+            },
+            "uniqueItems": true
+          },
+          "lexical_score": {"type": "number", "minimum": 0, "maximum": 1},
+          "semantic_candidate": {"type": "boolean"},
+          "ready": {"type": "boolean"}
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

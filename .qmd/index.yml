@@ -1,0 +1,31 @@
+global_context: Portable cross-repository second ganglia. Prefer durable shared knowledge over local engagement notes and short-term memory unless the query is explicitly project-specific or temporal. Markdown files are canonical; this index is a disposable semantic retrieval layer.
+collections:
+  ganglia:
+    path: .
+    pattern: "**/*.md"
+    includeByDefault: true
+    ignore:
+      - .agents/**
+      - .tmp/**
+      - local/session-catalog/**
+      - node_modules/**
+    context:
+      /: Cross-repository ganglia index and operating documentation.
+      /patterns: Reusable approaches and empirically useful working patterns.
+      /lessons: Empirical, non-obvious findings learned through debugging or measurement.
+      /decisions: Durable decisions with rationale and consequences.
+      /concepts: Explanations and mental models.
+      /snippets: Reusable commands, code, and compact procedures.
+      /sources: Distilled notes tied to external provenance.
+      /infra: Knowledge about Ganglia's own architecture, security, and operating infrastructure.
+      /local: Personal, machine-specific, engagement-specific, episodic, and short-term memory; never committed.
+  codex-sessions:
+    path: local/session-catalog
+    pattern: "**/*.md"
+    includeByDefault: false
+    context:
+      /: Private local summaries of Codex session history. Use for temporal recall, project resumption, and semantic links; never publish or commit them.
+models:
+  embed: hf:ggml-org/embeddinggemma-300M-GGUF/embeddinggemma-300M-Q8_0.gguf
+  generate: hf:tobil/qmd-query-expansion-1.7B-gguf/qmd-query-expansion-1.7B-q4_k_m.gguf
+  rerank: hf:ggml-org/Qwen3-Reranker-0.6B-Q8_0-GGUF/qwen3-reranker-0.6b-q8_0.gguf

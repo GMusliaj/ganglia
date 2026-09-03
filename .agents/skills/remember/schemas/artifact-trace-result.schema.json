@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.invalid/ganglia/artifact-trace-result.schema.json",
+  "title": "Ganglia artifact trace result",
+  "type": "object",
+  "required": ["schema_version", "kind", "eligible", "reason"],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "kind": {"type": "string", "const": "artifact-trace-result"},
+    "eligible": {"type": "boolean"},
+    "reason": {
+      "type": "string",
+      "enum": [
+        "eligible",
+        "unstable",
+        "not-repeatable",
+        "non-operational",
+        "incomplete-contract",
+        "ecosystem-runtime-unavailable"
+      ]
+    },
+    "language": {
+      "type": "string",
+      "enum": ["python", "javascript", "shell"]
+    }
+  },
+  "additionalProperties": false
+}

@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.invalid/ganglia/artifact-tree-validation-result.schema.json",
+  "title": "Ganglia shared artifact tree validation result",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "kind",
+    "status",
+    "manifests",
+    "payloads",
+    "errors"
+  ],
+  "properties": {
+    "schema_version": {
+      "type": "integer",
+      "const": 1
+    },
+    "kind": {
+      "type": "string",
+      "const": "artifact-tree-validation-result"
+    },
+    "status": {
+      "type": "string",
+      "enum": ["valid", "invalid"]
+    },
+    "manifests": {
+      "type": "integer"
+    },
+    "payloads": {
+      "type": "integer"
+    },
+    "errors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "message"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1
+          },
+          "message": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

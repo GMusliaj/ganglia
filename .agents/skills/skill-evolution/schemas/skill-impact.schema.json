@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Post-application skill impact",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "impact_id",
+    "proposal_id",
+    "proposal_digest",
+    "candidate_digest",
+    "application_digest",
+    "evidence_ids",
+    "task_count",
+    "passed_tasks",
+    "failed_tasks",
+    "pass_rate",
+    "signals",
+    "measured_at",
+    "impact_digest"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "kind": {"type": "string", "const": "skill-impact"},
+    "impact_id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "proposal_id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "proposal_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "candidate_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "application_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "evidence_ids": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"}
+    },
+    "task_count": {"type": "integer", "minimum": 1},
+    "passed_tasks": {"type": "integer", "minimum": 0},
+    "failed_tasks": {"type": "integer", "minimum": 0},
+    "pass_rate": {"type": "number", "minimum": 0, "maximum": 1},
+    "signals": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["key", "success_tasks", "failure_tasks"],
+        "properties": {
+          "key": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+          "success_tasks": {"type": "integer", "minimum": 0},
+          "failure_tasks": {"type": "integer", "minimum": 0}
+        }
+      }
+    },
+    "measured_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"},
+    "impact_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

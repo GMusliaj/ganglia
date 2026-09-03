@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Skill rollback",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schema_version",
+    "kind",
+    "proposal_id",
+    "skill_name",
+    "candidate_digest",
+    "restored_digest",
+    "application_digest",
+    "target_skill",
+    "rolled_back_at",
+    "rollback_digest"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "kind": {"type": "string", "const": "skill-rollback"},
+    "proposal_id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "skill_name": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "candidate_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "restored_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "application_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "target_skill": {"type": "string", "pattern": "^\\.agents/skills/[a-z0-9]+(?:-[a-z0-9]+)*/SKILL\\.md$"},
+    "rolled_back_at": {"type": "string", "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"},
+    "rollback_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"}
+  }
+}

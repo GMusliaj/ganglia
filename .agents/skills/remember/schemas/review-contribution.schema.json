@@ -1,0 +1,66 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://local.invalid/ganglia/review-contribution.schema.json",
+  "title": "Ganglia artifact review contribution",
+  "type": "object",
+  "required": [
+    "schema_version",
+    "kind",
+    "id",
+    "review_id",
+    "base_revision",
+    "producer",
+    "artifact_id",
+    "bundle_digest",
+    "evidence_digest",
+    "verdict",
+    "summary",
+    "findings",
+    "confidence"
+  ],
+  "properties": {
+    "schema_version": {"type": "integer", "const": 1},
+    "kind": {"type": "string", "const": "review-contribution"},
+    "id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "review_id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "base_revision": {"type": "integer", "minimum": 0},
+    "producer": {
+      "type": "string",
+      "enum": ["scriptability", "execution-risk", "retrieval-economics"]
+    },
+    "artifact_id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+    "bundle_digest": {"type": "string", "pattern": "^sha256:[0-9a-f]{64}$"},
+    "evidence_digest": {"type": "string", "pattern": "^(?:none|sha256:[0-9a-f]{64})$"},
+    "verdict": {"type": "string", "enum": ["accept", "block"]},
+    "summary": {"type": "string", "minLength": 1},
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "severity",
+          "path",
+          "line_start",
+          "line_end",
+          "body",
+          "recommendation",
+          "confidence"
+        ],
+        "properties": {
+          "id": {"type": "string", "pattern": "^[a-z0-9]+(?:-[a-z0-9]+)*$"},
+          "severity": {"type": "string", "enum": ["blocking", "material"]},
+          "path": {"type": "string", "minLength": 1},
+          "line_start": {"type": "integer", "minimum": 1},
+          "line_end": {"type": "integer", "minimum": 1},
+          "body": {"type": "string", "minLength": 1},
+          "recommendation": {"type": "string", "minLength": 1},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+        },
+        "additionalProperties": false
+      }
+    },
+    "confidence": {"type": "number", "minimum": 0, "maximum": 1}
+  },
+  "additionalProperties": false
+}

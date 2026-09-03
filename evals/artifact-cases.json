@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "kind": "artifact-eval-suite",
+  "cases": [
+    {"id": "eligible-operation", "category": "materialization", "assertion": "eligible-operation", "expected_behavior": "materialize"},
+    {"id": "prose-only-knowledge", "category": "materialization", "assertion": "prose-only-knowledge", "expected_behavior": "prose"},
+    {"id": "native-language", "category": "materialization", "assertion": "native-language", "expected_behavior": "native-language"},
+    {"id": "complete-manifest", "category": "materialization", "assertion": "complete-manifest", "expected_behavior": "complete"},
+    {"id": "safe-mutation-default", "category": "safety", "assertion": "safe-mutation-default", "expected_behavior": "reject-unsafe"},
+    {"id": "private-routing", "category": "privacy", "assertion": "private-routing", "expected_behavior": "no-local-leak"},
+    {"id": "duplicate-update", "category": "update", "assertion": "duplicate-update", "expected_behavior": "one-authoritative"},
+    {"id": "review-grounding", "category": "review", "assertion": "review-grounding", "expected_behavior": "reject-mismatch"},
+    {"id": "review-agreement", "category": "review", "assertion": "review-agreement", "expected_behavior": "agreement"},
+    {"id": "verification-calibration", "category": "verification", "assertion": "verification-calibration", "expected_behavior": "reject-false-verified"},
+    {"id": "approval-binding", "category": "verification", "assertion": "approval-binding", "expected_behavior": "reject-stale-approval"},
+    {"id": "recall-run-offer", "category": "retrieval", "assertion": "recall-run-offer", "expected_behavior": "exact-run-offer"},
+    {"id": "recall-byte-exact", "category": "retrieval", "assertion": "recall-byte-exact", "expected_behavior": "byte-exact"},
+    {"id": "authoritative-ranking", "category": "retrieval", "assertion": "authoritative-ranking", "expected_behavior": "authoritative"},
+    {"id": "context-mismatch", "category": "retrieval", "assertion": "context-mismatch", "expected_behavior": "incompatible"},
+    {"id": "offline-read-only", "category": "retrieval", "assertion": "offline-read-only", "expected_behavior": "no-write"},
+    {"id": "malformed-json", "category": "protocol", "assertion": "malformed-json", "expected_behavior": "reject-malformed"},
+    {"id": "stale-contribution", "category": "protocol", "assertion": "stale-contribution", "expected_behavior": "reject-stale"},
+    {"id": "digest-mismatch", "category": "protocol", "assertion": "digest-mismatch", "expected_behavior": "reject-digest"},
+    {"id": "incomplete-publication", "category": "protocol", "assertion": "incomplete-publication", "expected_behavior": "reject-incomplete"}
+  ]
+}
