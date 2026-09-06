@@ -1,7 +1,7 @@
 ---
 type: pattern
 title: Enforce delegated model routing with hooks, scripts, and skills
-description: Route bounded I/O-heavy agent work to named worker modes while keeping safety and context boundaries in executable hooks and wrappers.
+description: Route bounded I/O-heavy agent work from logical skill roles to explicit local model IDs while keeping safety and context boundaries in executable hooks and wrappers.
 tags: [codex, workflow, security]
 date: 2026-09-06
 ---
@@ -27,12 +27,20 @@ of work to another model or worker mode:
    judgment-heavy work such as debugging, architecture, and exact edits on the
    host agent.
 
-Route to a **named mode**, not directly to a model identifier, when the backend
-owns worker configuration. Resolve the mode server-side with an explicit
-precedence rule (for example, private, group, then public), fail on missing or
-ambiguous names, and offer an explicit ID override only for intentional
-pinning. Verify the response reports the expected applied mode; discard a
-generic answer when a stale pin caused the turn to run without the mode.
+Keep the published skill and hook interfaces provider-neutral by routing to a
+logical role such as `bulk-reader` or `code-writer`, then resolve that role in
+the local adapter to an explicit `(provider, model_id)` mapping. Make the
+mapping an intentional local-development configuration rather than hiding the
+model choice in skill prose. Fail closed when a role has no mapping, the model
+ID is stale or unsupported, or the response cannot prove which model ran.
+Return the selected role and model in diagnostics so a result is attributable
+and testable.
+
+Do not publish credentials, account-specific endpoints, or unstable machine
+configuration with the reusable hooks and skills. Publish the portable
+contracts and deterministic adapter; inject or separately configure model IDs
+when they are environment-specific. If a model ID is intentionally shareable,
+still validate it against the local provider before using it.
 
 Keep delegated calls one-shot when replaying the input corpus would defeat the
 purpose of delegation. Send the large input to the worker and return only the
@@ -40,16 +48,19 @@ summary or generated result to the host agent. Require reference material for
 boilerplate generation, and make direct file writes explicit and reviewable.
 
 For Ganglia-oriented custom skills, apply the same shape: define the candidate
-work and its hard boundary, enforce the boundary in a hook or validator, put
-integration and fail-closed checks in a deterministic wrapper, and use the
-skill text to guide selection and post-delegation review. Treat the underlying
-model choice as backend configuration rather than a promise encoded only in
-skill prose.
+work and its hard boundary, enforce the boundary in a hook or validator, map
+the logical role to an explicit local model ID, put integration and fail-closed
+checks in a deterministic wrapper, and use the skill text to guide selection
+and post-delegation review. The model mapping is part of the executable local
+configuration, not a promise encoded only in skill prose.
 
 ## Source
 
-Observed in the `portal-ai-plugins` `shunt` plugin: its Claude `PreToolUse`
-hooks route large reads, its `bulk-read` and `code-write` scripts call named
-AiKA modes through the Portal action registry, and its transport wrapper
-rejects missing modes, empty answers, malformed responses, oversized payloads,
-and stale mode pins.
+Reference implementation: [Spotify's `portal-ai-plugins`](https://github.com/spotify/portal-ai-plugins),
+especially the `shunt` plugin. Its Claude `PreToolUse` hooks route large reads,
+its `bulk-read` and `code-write` scripts call named AiKA modes through the
+Portal action registry, and its transport wrapper rejects missing modes, empty
+answers, malformed responses, oversized payloads, and stale mode pins. For
+Ganglia's local-development adaptation, preserve that hook/script/skill shape
+but replace server-side mode resolution with an explicit local
+`role -> (provider, model_id)` mapping.
