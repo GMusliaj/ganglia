@@ -309,6 +309,10 @@ tested at the end. Authorization is a separate question:
   scratch notes or handoff Markdown files unless requested.
 - Update `CHANGELOG.md` for material tooling, schema, routing, security, or UI
   changes. Never attribute pre-existing worktree changes to the current task.
+  Keep entries release-facing: record durable, user-relevant outcomes, not
+  internal narration, review exchanges, or transient draft edits. Consolidate
+  unreleased feature revisions into one entry; changelog housekeeping does not
+  need its own entry.
 - Create ordinary commits only when explicitly requested. The shared-memory
   auto-commit described above is the one standing exception. Never push unless
   asked.

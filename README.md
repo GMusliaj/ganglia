@@ -237,6 +237,15 @@ The complete JSON contracts, evaluator interface, and commands live in
 
 ## Retrieval
 
+The `bulk-reader` and `code-writer` skills are adapted from
+[Spotify's shunt](https://github.com/spotify/portal-ai-plugins/tree/3c24ca30ff63e1f5bbad1c43fe5324daff579123/plugins/shunt)
+under Apache-2.0, retaining their original names. They provide optional
+large-file comprehension and repetitive code drafts using explicit local model
+mappings, bounded one-shot calls, and opt-in read-routing hooks. See
+[setup and evaluation](docs/delegation.md) and [credits](THIRD_PARTY_NOTICES.md).
+Offline regression evals run in the normal verifier; live model quality and
+cost measurement require a separate reviewed test.
+
 Retrieval is tiered:
 
 1. QMD is the semantic ceiling, exposed to Codex through the `ganglia-qmd` MCP
@@ -354,10 +363,10 @@ canvas and JavaScript audit dependencies, installs the Codex commands, and runs
 the deterministic verification gate. To refresh only the Python environment,
 run `scripts/setup-python.sh`.
 
-The command installer makes the four checked-in skills (`remember`, `recall`,
-`fafo`, and `skill-evolution`) available across repositories and adds deprecated
-custom-prompt aliases for Codex CLI/IDE compatibility. It does not overwrite
-existing commands.
+The command installer makes the six checked-in skills (`remember`, `recall`,
+`fafo`, `skill-evolution`, `bulk-reader`, and `code-writer`) available across
+repositories and adds deprecated custom-prompt aliases for Codex CLI/IDE
+compatibility. It does not overwrite existing commands.
 
 `$remember` runs `scripts/auto-commit.sh` for shared knowledge. This is the
 owner-sanctioned exception to ordinary commit discipline. The script regenerates

@@ -24,4 +24,6 @@ trap 'rm -f -- "$ARTIFACT_EVAL_OUTPUT"' EXIT
   .agents/skills/remember \
   .agents/skills/recall \
   .agents/skills/fafo \
-  .agents/skills/skill-evolution
+  .agents/skills/skill-evolution \
+  .agents/skills/bulk-reader \
+  .agents/skills/code-writer

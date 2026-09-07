@@ -1,0 +1,18 @@
+{
+  "description": "Ganglia large-read routing. Review in observe mode before selecting enforce.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "^(Bash|Read|exec_command|shell_command)$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "python3 \"$(git rev-parse --show-toplevel)/bin/delegation_hook.py\" --mode observe",
+            "timeout": 3,
+            "statusMessage": "Checking read size"
+          }
+        ]
+      }
+    ]
+  }
+}
