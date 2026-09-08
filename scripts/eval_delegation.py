@@ -87,7 +87,7 @@ def main() -> int:
             return 1
         print(json.dumps(result, indent=2))
         return 0 if all(result["checks"].values()) else 1
-    suite = unittest.defaultTestLoader.discover(str(ROOT / "tests"), pattern="test_delegation.py")
+    suite = unittest.defaultTestLoader.discover(str(ROOT / "tests"), pattern="test_delegation*.py")
     report = Report()
     suite.run(report)
     print(json.dumps({"mode": "offline", "model_calls": 0, "tests_run": report.testsRun,

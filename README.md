@@ -22,9 +22,18 @@ to a core knowledge interface with two explicit operations:
 
 Codex reserves top-level slash commands, so literal `/remember` and `/recall`
 cannot be registered. Skills are the supported interface; `/skills` opens their
-selector. Ganglia also installs `$fafo` and `$skill-evolution` for bounded
-experimentation and evidence-driven skill improvement; their separate contract
-is documented under [Skill evolution](#skill-evolution).
+selector. Four additional skills support development work:
+
+- `$bulk-reader` answers a narrow question across large source files.
+- `$code-writer` drafts repetitive code from reference and source files.
+- `$fafo` runs bounded experiments to resolve concrete uncertainties.
+- `$skill-evolution` proposes skill improvements from recurrent evidence.
+
+The first two use explicitly configured workers to keep bulk source and
+boilerplate generation out of the host conversation. See
+[delegated reading and code drafts](#delegated-reading-and-code-drafts) for setup
+and cost measurement, and [skill evolution](#skill-evolution) for the experiment
+and improvement contracts. Installing skills alone does not activate workers.
 
 ## Layout
 
@@ -41,11 +50,15 @@ local/                 gitignored private and episodic memory
   projects/<name>/      engagement/project knowledge and checkpoints
   short-mem/            scratch and half-formed notes
   skill-evolution/      evidence, patterns, proposals, gates, impact, and rollback
+  delegation.json      private, explicit worker role/model mappings
 meta/tag-taxonomy.md    registered shared tags
 MEMORY.md               generated shared index
 local/MEMORY.local.md   generated local orientation and index
 onboarding.md            machine-wide Codex skill, MCP, and instruction setup
-bin/                    OKF validation, linting, and indexing tools
+bin/                    knowledge tools, canvas, skill evolution, and delegation
+.agents/skills/         six portable Codex skills
+hooks/                 opt-in hook templates; not active configuration
+evals/delegation/       deterministic read-routing fixtures
 evals/skills/           deterministic skill-evaluator adapters
 scripts/                setup, security, command installation, and QA
 ```
@@ -235,16 +248,74 @@ signals without treating instruction-contract scores as runtime effectiveness.
 The complete JSON contracts, evaluator interface, and commands live in
 [the skill workflow](.agents/skills/skill-evolution/references/workflow.md).
 
-## Retrieval
+## Delegated reading and code drafts
 
 The `bulk-reader` and `code-writer` skills are adapted from
 [Spotify's shunt](https://github.com/spotify/portal-ai-plugins/tree/3c24ca30ff63e1f5bbad1c43fe5324daff579123/plugins/shunt)
-under Apache-2.0, retaining their original names. They provide optional
-large-file comprehension and repetitive code drafts using explicit local model
-mappings, bounded one-shot calls, and opt-in read-routing hooks. See
-[setup and evaluation](docs/delegation.md) and [credits](THIRD_PARTY_NOTICES.md).
-Offline regression evals run in the normal verifier; live model quality and
-cost measurement require a separate reviewed test.
+under Apache-2.0. These are modified adaptations: the Codex transport, explicit
+local model mapping, validation, and regression tests are repository-owned.
+See [third-party credits and provenance](THIRD_PARTY_NOTICES.md).
+
+| Work | Route |
+| --- | --- |
+| Narrow comprehension across large source files | `$bulk-reader`; host receives a bounded summary with references |
+| Repetitive tests, types, or configuration with reference/source files | `$code-writer`; host reviews and tests the draft |
+| Small searches, debugging, architecture, exact edits, required instruction reads | Host; avoid worker overhead |
+
+Each worker call receives only the explicit task and files, not the parent
+conversation. The wrapper checks the selected model, limits, and returned usage;
+it makes one fresh turn with no automatic retry or fallback model. Writer output
+defaults to stdout; `--target` can create a new file but never overwrite one.
+
+From the checkout, inspect setup before delegating:
+
+```sh
+.venv/bin/python bin/delegation.py status
+.venv/bin/python bin/delegation.py models
+```
+
+`status` is offline and exits 1 when local prerequisites are missing. It reports
+role configuration and global skill links separately from unverified runtime
+activation. `models` queries the installed Codex CLI's catalog without starting
+an inference turn or sending source files. Neither command configures anything.
+
+Create ignored `local/delegation.json` using the
+[configuration example](docs/delegation.example.json), verifying its explicit
+model choices and per-role limits. The example starts both bounded roles on
+`gpt-5.6-luna` at low effort, with a smaller output budget for summaries than
+code drafts. See [capability-sized model choices](docs/delegation.md#capability-sized-model-choices)
+before selecting a larger worker. Currently
+only the `codex` adapter is supported. Then preview either workflow without
+inference:
+
+```sh
+.venv/bin/python bin/delegation.py --root . bulk-read \
+  --question "What gates does verification run?" --paths scripts/verify.sh
+.venv/bin/python bin/delegation.py --root . code-write \
+  --spec "Draft unittest cases for strip_outer_fence, preserving internal fences." \
+  --reference tests/test_delegation_limits.py --context bin/delegation.py
+```
+
+Add `--execute` before the subcommand to send the selected files to the worker
+within the task's data authorization. In Codex, invoke `$bulk-reader` or
+`$code-writer` with the question/specification and file paths. Skills can also be
+selected implicitly for matching work; the host still owns routing and review.
+
+The optional [read hook](hooks/delegation.json) observes recognized reads above
+350 returned lines or 50,000 bytes by default. It does not launch a worker, and
+the installer does not activate it. Review the
+[hook setup and coverage limits](docs/delegation.md#local-setup-and-review)
+before enabling enforcement. It is a context guardrail, not a shell sandbox.
+
+Run `.venv/bin/python scripts/eval_delegation.py` for offline regression checks;
+these also run through `scripts/verify.sh`. A separate opt-in live smoke test
+makes two worker calls. See [evals and cost measurement](docs/delegation.md#evals-and-cost-measurement)
+for that test and the real-session acceptance checklist. Offline passes do not
+prove live routing or savings. Worker input/output tokens still count: compare
+the same task with and without delegation, including host review, cache usage,
+latency, and correctness before claiming a reduction in total tokens or cost.
+
+## Retrieval
 
 Retrieval is tiered:
 
@@ -368,6 +439,12 @@ The command installer makes the six checked-in skills (`remember`, `recall`,
 repositories and adds deprecated custom-prompt aliases for Codex CLI/IDE
 compatibility. It does not overwrite existing commands.
 
+Worker setup is separate: it does not create `local/delegation.json`, choose
+models, or install/trust hooks. Follow the
+[delegation quickstart](#delegated-reading-and-code-drafts) and
+[propagation checks](onboarding.md#verify-propagation) before relying on the two
+worker skills across repositories.
+
 `$remember` runs `scripts/auto-commit.sh` for shared knowledge. This is the
 owner-sanctioned exception to ordinary commit discipline. The script regenerates
 indexes, validates artifact bundle closure, runs the repository-owned
@@ -408,6 +485,7 @@ a repository-owned tool manifest.
 
 Ganglia is released under the [Apache License 2.0](LICENSE), identified by the
 SPDX expression `Apache-2.0`. See [NOTICE](NOTICE) for project attribution and
-[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for D3.js terms. Live canvas
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) for Spotify skill provenance and
+D3.js terms. Live canvas
 responses and explicit exports embed the D3.js license notice alongside the
 inlined library.

@@ -13,6 +13,8 @@ The checked-in skill directories are authoritative:
 ~/ganglia/.agents/skills/recall/
 ~/ganglia/.agents/skills/fafo/
 ~/ganglia/.agents/skills/skill-evolution/
+~/ganglia/.agents/skills/bulk-reader/
+~/ganglia/.agents/skills/code-writer/
 ```
 
 Codex discovers user-global skills under `~/.agents/skills`. Ganglia installs
@@ -23,6 +25,8 @@ symlinks there:
 ~/.agents/skills/recall   -> ~/ganglia/.agents/skills/recall
 ~/.agents/skills/fafo     -> ~/ganglia/.agents/skills/fafo
 ~/.agents/skills/skill-evolution -> ~/ganglia/.agents/skills/skill-evolution
+~/.agents/skills/bulk-reader -> ~/ganglia/.agents/skills/bulk-reader
+~/.agents/skills/code-writer -> ~/ganglia/.agents/skills/code-writer
 ```
 
 Codex supports symlinked skill directories. Consequently, there is no second
@@ -31,8 +35,8 @@ user-global skill immediately. Codex normally detects skill changes; start a
 new Codex session if updated metadata or behavior does not appear.
 
 Ganglia also installs legacy custom-prompt aliases under `~/.codex/prompts/`.
-The supported direct invocations are `$remember`, `$recall`, `$fafo`, and
-`$skill-evolution`; only remember and recall have the legacy aliases
+The supported direct invocations are `$remember`, `$recall`, `$fafo`,
+`$skill-evolution`, `$bulk-reader`, and `$code-writer`; only remember and recall have the legacy aliases
 `/prompts:remember` and `/prompts:recall`. `/remember` and `/recall` are not
 native top-level Codex slash commands.
 
@@ -58,6 +62,12 @@ This command:
 Restart Codex after the first installation so skill discovery, MCP tools, and
 global instructions are rebuilt in a new session.
 
+Worker activation is separate from skill installation. Setup does not select
+worker models, create `local/delegation.json`, install hooks, or run inference.
+Follow [delegation setup](docs/delegation.md#local-setup-and-review) to configure
+explicit role/model mappings and preview the selected corpus. Optional read
+hooks require review and trust; they do not invoke workers automatically.
+
 ## Verify propagation
 
 Check the live skill targets:
@@ -67,9 +77,11 @@ readlink ~/.agents/skills/remember
 readlink ~/.agents/skills/recall
 readlink ~/.agents/skills/fafo
 readlink ~/.agents/skills/skill-evolution
+readlink ~/.agents/skills/bulk-reader
+readlink ~/.agents/skills/code-writer
 ```
 
-Both paths should resolve into this Ganglia checkout. Confirm that the installed
+All six paths should resolve into this Ganglia checkout. Confirm that the installed
 files are the same bytes as the checked-in files:
 
 ```sh
@@ -77,9 +89,26 @@ cmp .agents/skills/remember/SKILL.md ~/.agents/skills/remember/SKILL.md
 cmp .agents/skills/recall/SKILL.md ~/.agents/skills/recall/SKILL.md
 cmp .agents/skills/fafo/SKILL.md ~/.agents/skills/fafo/SKILL.md
 cmp .agents/skills/skill-evolution/SKILL.md ~/.agents/skills/skill-evolution/SKILL.md
+cmp .agents/skills/bulk-reader/SKILL.md ~/.agents/skills/bulk-reader/SKILL.md
+cmp .agents/skills/code-writer/SKILL.md ~/.agents/skills/code-writer/SKILL.md
 ```
 
 No output and exit status zero means propagation is current.
+
+For a staged installation test, `scripts/install-codex-commands.sh` accepts
+`GANGLIA_SKILL_DIR` and `GANGLIA_PROMPT_DIR` as explicit destination overrides.
+Set both to ignored temporary directories to inspect links without changing
+user-global installation. These staged links are not automatically discovered
+by Codex. The regression suite exercises this isolated path.
+
+For worker readiness, run `.venv/bin/python bin/delegation.py status`. This is
+offline: missing mappings produce exit 1, and global link status is separate
+from local prerequisites. A ready configuration is not proof of live execution.
+The `models` subcommand lists available IDs and efforts without inference.
+After an authorized worker call, its stderr diagnostics identify the selected
+role/model and actual token usage. See the
+[live acceptance checks](docs/delegation.md#evals-and-cost-measurement) before
+claiming routing or savings are verified.
 
 Validate the remaining machine integration:
 
@@ -91,7 +120,7 @@ scripts/verify.sh
 
 The MCP command should be enabled and point to this checkout's
 `scripts/qmd.sh mcp`. Verification should run the tests, artifact evaluations,
-publication guard, Ganglia lint, and all four official skill validators without a
+publication guard, Ganglia lint, and validation of all six skills without a
 dependency-skip warning.
 
 ## Updating Ganglia
@@ -167,7 +196,8 @@ larger `project_doc_max_bytes` intentionally and restart Codex.
 
 Use this checklist after setup or troubleshooting:
 
-- [ ] The `remember`, `recall`, `fafo`, and `skill-evolution` symlinks under
+- [ ] The `remember`, `recall`, `fafo`, `skill-evolution`, `bulk-reader`, and
+      `code-writer` symlinks under
       `~/.agents/skills/` point into this checkout.
 - [ ] No unintended `~/.codex/AGENTS.override.md` shadows global guidance.
 - [ ] Global guidance uses `$remember` and `$recall`, not nonexistent top-level
@@ -175,12 +205,17 @@ Use this checklist after setup or troubleshooting:
 - [ ] Global guidance does not rely on undocumented `@path` imports.
 - [ ] `codex mcp get ganglia-qmd` is enabled and points to the current checkout.
 - [ ] `.venv/bin/python` imports the pinned development and security tooling.
-- [ ] `scripts/verify.sh` validates all four skills and passes offline Bandit,
+- [ ] `scripts/verify.sh` validates all six skills and passes offline Bandit,
       ShellCheck, and ESLint analysis.
 - [ ] `scripts/audit-security.sh` passes current PyPI, OSV, and npm advisory
       checks before publication.
 - [ ] A new Codex session exposes `$remember`, `$recall`, `$fafo`, and
-      `$skill-evolution` through `/skills` or `$` mention completion.
+      `$skill-evolution`, plus `$bulk-reader` and `$code-writer`, through `/skills`
+      or `$` mention completion.
+- [ ] For delegation: `bin/delegation.py status` reports configured roles and
+      global links; reviewed live calls confirm the model and usage.
+- [ ] If read hooks are desired: `/hooks` shows the reviewed definition, and a
+      real-session large read demonstrates observe/enforce behavior.
 
 ## Official Codex references
 

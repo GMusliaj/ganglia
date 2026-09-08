@@ -15,9 +15,20 @@ The shipped files are reviewable source. The hook template defaults to
 1. Review `bin/delegation.py`, `bin/delegation_codex.py`,
    `bin/delegation_common.py`, `bin/delegation_hook.py`, the two skills, and
    the evals below.
-2. Create private `local/delegation.json` using
-   [`delegation.example.json`](delegation.example.json). Replace each
-   `EXAMPLE_MODEL_ID` with the exact model you want for that role. The
+2. Check prerequisites with `.venv/bin/python bin/delegation.py status`.
+   This offline command reports both roles, global link targets, CLI presence,
+   and hook-file presence. Exit 1 means local prerequisites are incomplete;
+   even exit 0 does not establish model availability, skill selection, or hook
+   trust/execution. Inline, plugin and managed hooks require inspection in
+   `/hooks`; a file alone is not evidence that any hook ran.
+   Run `.venv/bin/python bin/delegation.py models` to list available model IDs
+   and reasoning efforts through the installed CLI, without creating an
+   inference thread or sending repository files. This may need the host's normal
+   configuration/network access; it does not modify configuration.
+   Create private `local/delegation.json` using
+   [`delegation.example.json`](delegation.example.json). It explicitly maps both
+   bounded roles to `gpt-5.6-luna` at low effort; verify availability and adjust
+   the choices intentionally using the capability guidance below. The
    `provider: codex` adapter uses the installed, authenticated Codex CLI and
    its `openai` provider; no model is silently selected. Availability and
    reasoning effort are checked with `model/list` immediately before use.
@@ -39,13 +50,59 @@ The shipped files are reviewable source. The hook template defaults to
    Hook commands resolve from the Git root, so this template is for Ganglia.
    For another repository, use the reviewed absolute Ganglia script path in
    that repository's private hook configuration. Do not copy the runtime.
-5. Use `$bulk-reader` or `$code-writer` in a fresh session. Global skill links
+5. Use `$bulk-reader` or `$code-writer` in a fresh session. Repository-local
+   discovery already exposes both while working inside Ganglia. Global skill links
    can be added through `scripts/install-codex-commands.sh` after review; this
    installer never activates the hooks. A missing worker mapping falls back
    to ordinary targeted reads, not to an unspecified model.
 
 The port does not change existing remember/recall or FAFO behavior. Knowledge
 still works with plain text search when worker models are unavailable.
+
+The two skills are also eligible for implicit selection on matching tasks.
+Ganglia's `AGENTS.md` directs eligible bulk comprehension and repetitive drafts
+through them before the host loads the corpus or writes the boilerplate. This
+is guidance, not proof that a host followed it. Hooks observe or deny recognized
+reads and point the host to the skill; they do not start inference, and they do
+not route code generation. Test both skill-selection paths in a real session.
+
+## Capability-sized model choices
+
+Use the least expensive available model that passes the task's quality checks.
+Two role names do not require two different model sizes. The example profile
+starts both roles on `gpt-5.6-luna`, with different output and usage budgets:
+
+| Work | Starting route | Acceptance check |
+| --- | --- | --- |
+| Extraction and narrow summaries from explicit files | `bulk-reader` → `gpt-5.6-luna`, `low` | Spot-check cited lines, exact values, and omissions |
+| Reference-bound repetitive tests, types, and config | `code-writer` → `gpt-5.6-luna`, `low` | Review the draft and run source-repository tests |
+| Exact searches, small reads, architecture, debugging, novel logic | Host; no worker call | Normal task-specific verification |
+
+OpenAI describes Luna as a cost-sensitive model for extraction and focused
+coding. As checked on 2026-09-07, its standard API rates are $0.20/M input,
+$0.02/M cached input, and $1.20/M output. These published rates support a cheap
+starting point, not a measured end-to-end saving. See the
+[model specification](https://developers.openai.com/api/docs/models/gpt-5.6-luna)
+and [Codex workload guidance](https://learn.chatgpt.com/docs/pricing).
+
+`gpt-5.4-mini` is a possible explicit alternative when a representative coding
+eval demonstrates that Luna is insufficient: it is coding-oriented but costs
+$0.75/M input, $0.075/M cached input, and $4.50/M output at published standard API
+rates. Do not choose a larger model merely because the role writes code, and
+do not install an automatic escalation chain. See its
+[model specification](https://developers.openai.com/api/docs/models/gpt-5.4-mini).
+Tasks needing open-ended judgment belong on the host, outside these workers.
+
+Both example routes cap serialized input at 35,000 bytes. The reader allows
+4,000 output bytes, 20,000 observed worker tokens, and 60 seconds; the writer
+allows 12,000 output bytes, 24,000 observed worker tokens, and 90 seconds.
+These are task budgets, not the models' context-window capacities or prepaid
+spend caps. Backend/runtime context also contributes to worker input usage;
+a byte-valid corpus can still exceed the token budget. Use smaller file sets
+and concise requests; reaching a limit is not
+permission to raise it or retry. The lowest effort currently exposed by the
+Codex catalog for Luna is `low`; do not assume API effort options are available
+in every Codex client. Subscription usage and API charges remain distinct.
 
 ## Boundaries and differences from upstream
 
@@ -98,7 +155,11 @@ managed restrictions are not bypassed. Runtime tools that escape documented
 hook/environment coverage cannot be claimed safe by a prompt alone: live
 activation needs the integration check below.
 
-Reader responses include references for host spot-checking. Writer requests
+Reader inputs carry explicit 1-based line labels, counted in the serialized
+payload budget, while source hashes still cover the original bytes. Reader
+responses include references for host spot-checking; labels improve citation
+grounding but do not prove answer quality. Writer inputs remain unmodified.
+Writer requests
 require a reference and support additional source context. Drafts default to
 stdout. `--target` creates only a new file, after validating a successful
 response; existing targets and symlinks are rejected before a model call.
@@ -117,7 +178,9 @@ scripts/verify.sh
 
 `tests/test_delegation.py` and `evals/delegation/routing-cases.json` cover the
 issue #10 parser regressions, host JSON shape, CLI previews, role/model/effort
-validation, single-turn protocol, reroutes, invalid output, deadlines, token
+validation, isolated/idempotent skill installation, readiness diagnostics,
+no-inference model discovery, reader line labels, numeric profile boundaries, single-turn
+protocol, reroutes, invalid output, deadlines, token
 and byte limits, path boundaries, non-clobber writes and internal fences. An
 independent fake worker process also exercises a large stdin payload, JSONL
 framing, early usage notifications, final-only output and process cleanup.

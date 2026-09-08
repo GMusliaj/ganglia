@@ -32,6 +32,8 @@ bin/reindex.py                regenerate shared, folder, and local navigation in
 bin/lint_ganglia.py             read-only validation of the shared OKF-lite contract
 bin/canvas.py                 serve the live knowledge graph or explicitly export a snapshot
 bin/sync_codex_sessions.py    build the private, compact session catalog used by QMD and canvas
+bin/delegation.py status      inspect worker setup offline; models lists available IDs without inference
+scripts/eval_delegation.py    run offline delegation checks; --live explicitly invokes workers
 scripts/verify.sh             run repository tests, guards, reindexing, lint, and shell validation
 ```
 
@@ -209,6 +211,26 @@ HTML by default.
   implicit through `/remember` and `/recall`.
 - Success is one terse path. Do not echo stored content, index churn, or commit
   hashes unless asked. Failures that need attention are reported verbatim.
+
+## Delegated reading and code drafts
+
+- Use `bulk-reader` for a narrow comprehension question across large source
+  files, and `code-writer` for predictable boilerplate with explicit reference
+  and source files. Consult these skills before loading the full corpus or
+  drafting repetitive code on the host. Small searches, debugging, architecture,
+  mandatory instruction reads, and surgical edits stay on the host.
+- Once the role is explicitly configured and the task authorizes sending the
+  selected files, use the skill's wrapper execution path, not just its preview.
+  Spot-check reader citations and review/test writer drafts. Batch related
+  questions and reuse answers instead of repeatedly sending the same corpus.
+- If setup is missing, run `.venv/bin/python bin/delegation.py status`, report
+  the blocker once, and use targeted local work. The `models` subcommand lists
+  available IDs without inference; it never chooses a model. Do not silently
+  create mappings, install hooks, or retry with another model.
+- Skill discovery does not prove execution. Hooks are optional read guardrails,
+  not worker launchers; trust and real-session behavior require separate checks.
+  Report actual worker usage and keep savings unknown without a matched baseline.
+  See [the delegation guide](docs/delegation.md) for setup and evaluation.
 
 ## FAFO and skill-evolution contract
 

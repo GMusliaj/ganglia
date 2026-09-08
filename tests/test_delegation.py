@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -281,6 +282,90 @@ for line in sys.stdin:
         worker.assert_not_called()
         self.assertNotIn("line\n", out)
 
+    def test_reader_receives_physical_line_labels_but_writer_receives_source(self):
+        raw = b"first\r\n\r\nlast\xe2\x80\xa8part"
+        (self.root / "numbered.txt").write_bytes(raw)
+        read = delegation.prepare(self.root, "bulk-reader", "cite lines", ["numbered.txt"], ROUTE)
+        write = delegation.prepare(self.root, "code-writer", "draft", ["numbered.txt"], ROUTE)
+        self.assertEqual(read["payload"]["files"][0]["text"], "1: first\r\n2: \r\n3: last\u2028part")
+        self.assertEqual(write["payload"]["files"][0]["text"], raw.decode())
+        self.assertEqual(read["source_bytes"], len(raw))
+        self.assertEqual(read["payload"]["files"][0]["sha256"], hashlib.sha256(raw).hexdigest())
+
+    def test_line_labels_respect_final_newlines_and_the_serialized_budget(self):
+        (self.root / "numbered.txt").write_text("first\n\n")
+        request = delegation.prepare(self.root, "bulk-reader", "cite", ["numbered.txt"], ROUTE)
+        self.assertEqual(request["payload"]["files"][0]["text"], "1: first\n2: ")
+        with self.assertRaisesRegex(delegation.DelegationError, "serialized input"):
+            delegation.prepare(self.root, "bulk-reader", "cite", ["numbered.txt"], ROUTE | {"max_payload_bytes": request["payload_bytes"] - 1})
+
+    def test_status_distinguishes_configuration_from_execution(self):
+        before = self.config.read_bytes()
+        with patch.object(delegation, "shutil") as commands, patch.object(delegation_codex, "invoke") as worker:
+            commands.which.return_value = "/example/codex"
+            status = delegation.local_status(self.config, self.root, self.root / "skills", self.root / "codex")
+        worker.assert_not_called()
+        self.assertTrue(status["local_prerequisites_ready"])
+        self.assertFalse(status["global_prerequisites_ready"])
+        self.assertEqual(status["model_calls"], 0)
+        self.assertEqual(status["live_execution"], "unverified")
+        self.assertIsNone(status["money_saved"])
+        self.assertEqual(status["hook_files_present"], {"project": False, "user": False})
+        self.assertEqual(self.config.read_bytes(), before)
+        self.assertFalse((self.root / "skills").exists())
+        self.assertFalse((self.root / "codex").exists())
+
+    def test_status_requires_both_routes_and_a_cli(self):
+        self.config.write_text(json.dumps({"version": 1, "roles": {"bulk-reader": ROUTE}}))
+        with patch.object(delegation.shutil, "which", return_value="/example/codex"):
+            status = delegation.local_status(self.config, self.root, self.root / "skills", self.root / "codex")
+        self.assertFalse(status["local_prerequisites_ready"])
+        self.assertTrue(status["roles"]["bulk-reader"]["configured"])
+        self.assertFalse(status["roles"]["code-writer"]["configured"])
+        with patch.object(delegation.shutil, "which", return_value=None):
+            status = delegation.local_status(self.config, self.root, self.root / "skills", self.root / "codex")
+        self.assertFalse(status["codex_cli_available"])
+        self.assertFalse(status["local_prerequisites_ready"])
+
+    def test_status_checks_global_link_targets_not_just_presence(self):
+        skills = self.root / "skills"
+        skills.mkdir()
+        for role in delegation.ROLES:
+            (skills / role).symlink_to(ROOT / ".agents/skills" / role, target_is_directory=True)
+        with patch.object(delegation.shutil, "which", return_value="/example/codex"):
+            status = delegation.local_status(self.config, self.root, skills, self.root / "codex")
+            self.assertTrue(status["global_prerequisites_ready"])
+            (skills / "bulk-reader").unlink()
+            (skills / "bulk-reader").symlink_to(self.root / "missing", target_is_directory=True)
+            status = delegation.local_status(self.config, self.root, skills, self.root / "codex")
+        self.assertFalse(status["global_prerequisites_ready"])
+        self.assertEqual(status["roles"]["bulk-reader"]["global_install"], "conflict")
+
+    def test_status_does_not_claim_hook_activation_from_a_file(self):
+        (self.root / ".codex").mkdir()
+        (self.root / ".codex/hooks.json").write_text("{}")
+        status = delegation.local_status(self.config, self.root, self.root / "skills", self.root / "codex")
+        self.assertTrue(status["hook_files_present"]["project"])
+        self.assertTrue(status["hook_activation"].startswith("unverified"))
+
+    def test_status_real_cli_has_no_model_or_source_dependency(self):
+        process = self.cli_subprocess(["status"])
+        self.assertEqual(process.returncode, 1)  # Fixture PATH contains no Codex.
+        self.assertEqual(process.stderr, "")
+        status = json.loads(process.stdout)
+        self.assertEqual(status["model_calls"], 0)
+        self.assertFalse(status["local_prerequisites_ready"])
+        self.assertNotIn("source_bytes", status)
+
+    def test_diagnostic_commands_reject_execute(self):
+        with patch.object(delegation_codex, "available_models") as catalog, patch.object(delegation_codex, "invoke") as worker:
+            for command in ("status", "models"):
+                status, out, _ = self.cli(["--execute", command])
+                self.assertEqual(status, 1)
+                self.assertEqual(out, "")
+        catalog.assert_not_called()
+        worker.assert_not_called()
+
     def test_cli_one_call_and_usage(self):
         with patch.object(delegation_codex, "invoke", return_value=self.result()) as worker:
             status, out, err = self.cli(["--execute", "bulk-read", "--question", "what?", "--paths", "small.txt"])
@@ -379,6 +464,52 @@ for line in sys.stdin:
             delegation.estimate_cost(usage, {"input": float("nan"), "cached_input": 1, "output": 5})
 
 
+class InstallationTests(unittest.TestCase):
+    def setUp(self):
+        self.temp = tempfile.TemporaryDirectory()
+        self.root = Path(self.temp.name)
+        self.addCleanup(self.temp.cleanup)
+        self.skills = self.root / "skills"
+        self.prompts = self.root / "prompts"
+
+    def install(self):
+        return subprocess.run(
+            ["/bin/bash", str(ROOT / "scripts/install-codex-commands.sh")],
+            cwd=self.root, env=os.environ | {"GANGLIA_SKILL_DIR": str(self.skills),
+                                             "GANGLIA_PROMPT_DIR": str(self.prompts)},
+            capture_output=True, text=True, timeout=5, check=False)
+
+    def test_all_six_skills_install_without_activating_workers(self):
+        process = self.install()
+        self.assertEqual(process.returncode, 0, process.stderr)
+        roles = {"remember", "recall", "fafo", "skill-evolution", "bulk-reader", "code-writer"}
+        self.assertEqual({path.name for path in self.skills.iterdir()}, roles)
+        for role in roles:
+            self.assertTrue((self.skills / role).is_symlink())
+            self.assertEqual((self.skills / role).resolve(), ROOT / ".agents/skills" / role)
+        self.assertEqual({path.name for path in self.prompts.iterdir()}, {"remember.md", "recall.md"})
+        # No configuration, hooks, or other state is created in the target tree.
+        self.assertEqual({path.name for path in self.root.iterdir()}, {"skills", "prompts"})
+
+    def test_reinstallation_preserves_link_identity(self):
+        self.assertEqual(self.install().returncode, 0)
+        before = {path.name: path.lstat().st_ino for path in self.skills.iterdir()}
+        self.assertEqual(self.install().returncode, 0)
+        self.assertEqual({path.name: path.lstat().st_ino for path in self.skills.iterdir()}, before)
+
+    def test_conflicting_worker_is_not_overwritten(self):
+        self.skills.mkdir()
+        existing = self.skills / "bulk-reader"
+        existing.mkdir()
+        marker = existing / "SKILL.md"
+        marker.write_text("Existing skill; preserve this file.\n")
+        process = self.install()
+        self.assertEqual(process.returncode, 1)
+        self.assertEqual(marker.read_text(), "Existing skill; preserve this file.\n")
+        self.assertFalse(existing.is_symlink())
+        self.assertIn("Refusing to overwrite existing command path", process.stderr)
+
+
 class FakeRpc:
     serial = 0
 
@@ -426,13 +557,42 @@ class AdapterTests(unittest.TestCase):
             self.run_fake(rpc)
         self.assertNotIn("turn/start", [c[0] for c in rpc.calls])
 
+    def test_catalog_probe_never_starts_a_thread_or_turn(self):
+        rpc = FakeRpc()
+        with patch.object(delegation_codex.shutil, "which", return_value="/example/codex"), patch.object(delegation_codex, "Rpc", return_value=rpc), patch.object(rpc, "close", create=True) as close:
+            models = delegation_codex.available_models()
+        self.assertEqual(models, [{"model_id": "fixture-model", "efforts": ["low"]}])
+        self.assertEqual([method for method, _ in rpc.calls], ["initialize", "initialized", "model/list"])
+        close.assert_called_once()
+
+    def test_catalog_pagination_is_complete_and_bounded(self):
+        rpc = FakeRpc()
+        with patch.object(rpc, "call", side_effect=[
+            {"data": [{"model": "first"}], "nextCursor": "page-two"},
+            {"data": [{"model": "second"}], "nextCursor": None},
+        ]) as call:
+            self.assertEqual(delegation_codex.model_catalog(rpc), [{"model": "first"}, {"model": "second"}])
+            self.assertEqual(call.call_args.args[1]["cursor"], "page-two")
+        with patch.object(rpc, "call", return_value={"data": [], "nextCursor": "loop"}) as call:
+            with self.assertRaisesRegex(delegation.DelegationError, "page budget"):
+                delegation_codex.model_catalog(rpc)
+            self.assertEqual(call.call_count, 10)
+
+    def test_malformed_catalog_is_not_reported_as_available(self):
+        for page in ({"data": [None]}, {"data": [] , "nextCursor": 1}, {"data": {}}):
+            with self.subTest(page=page), patch.object(FakeRpc, "call", return_value=page):
+                with self.assertRaises(delegation.DelegationError):
+                    delegation_codex.model_catalog(FakeRpc())
+
     def test_configured_tools_disabled_without_persistent_mutation(self):
         rpc = FakeRpc()
-        rpc.config = {"config": {"mcp_servers": {"fixture.server": {}}, "plugins": {"fixture@market": {}}}}
+        rpc.config = {"config": {"mcp_servers": {"fixture.server": {"command": "fixture-worker", "tool_timeout_sec": None, "enabled": True}}, "plugins": {"fixture@market": {"enabled": True}}}}
+        before = json.loads(json.dumps(rpc.config))
         self.run_fake(rpc)
         config = next(params["config"] for method, params in rpc.calls if method == "thread/start")
-        self.assertFalse(config['mcp_servers."fixture.server".enabled'])
-        self.assertFalse(config['plugins."fixture@market".enabled'])
+        self.assertEqual(config["mcp_servers"], {"fixture.server": {"enabled": False}})
+        self.assertEqual(config["plugins"], {"fixture@market": {"enabled": False}})
+        self.assertEqual(rpc.config, before)
         self.assertFalse(config["features.shell_tool"])
         self.assertEqual(config["web_search"], "disabled")
         self.assertFalse(any(method.startswith("config/") and method != "config/read" for method, _ in rpc.calls))
@@ -477,7 +637,13 @@ class AdapterTests(unittest.TestCase):
     def test_usage_budget(self):
         rpc = FakeRpc()
         rpc.events[1]["params"]["tokenUsage"]["total"]["totalTokens"] = 999_999
-        with self.assertRaises(delegation.DelegationError):
+        with self.assertRaisesRegex(delegation.DelegationError, "observed 999999, limit 80000"):
+            self.run_fake(rpc)
+
+    def test_missing_usage_is_not_reported_as_a_budget_overrun(self):
+        rpc = FakeRpc()
+        del rpc.events[1]["params"]["tokenUsage"]["total"]["totalTokens"]
+        with self.assertRaisesRegex(delegation.DelegationError, "missing an integer totalTokens"):
             self.run_fake(rpc)
 
     def test_real_stdio_roundtrip_without_inference(self):

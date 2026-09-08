@@ -3,21 +3,21 @@
   "roles": {
     "bulk-reader": {
       "provider": "codex",
-      "model_id": "EXAMPLE_MODEL_ID",
+      "model_id": "gpt-5.6-luna",
       "effort": "low",
-      "max_payload_bytes": 200000,
-      "max_output_bytes": 6000,
-      "timeout_seconds": 90,
-      "max_worker_tokens": 80000
+      "max_payload_bytes": 35000,
+      "max_output_bytes": 4000,
+      "timeout_seconds": 60,
+      "max_worker_tokens": 20000
     },
     "code-writer": {
       "provider": "codex",
-      "model_id": "EXAMPLE_MODEL_ID",
+      "model_id": "gpt-5.6-luna",
       "effort": "low",
-      "max_payload_bytes": 200000,
-      "max_output_bytes": 20000,
-      "timeout_seconds": 120,
-      "max_worker_tokens": 80000
+      "max_payload_bytes": 35000,
+      "max_output_bytes": 12000,
+      "timeout_seconds": 90,
+      "max_worker_tokens": 24000
     }
   }
 }

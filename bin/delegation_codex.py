@@ -117,22 +117,51 @@ class Rpc:
                 stream.close()
 
 
-def run_turn(rpc: Rpc, payload: dict, route: dict, instructions: str, cwd: Path) -> dict:
+def initialize(rpc: Rpc) -> None:
     rpc.call("initialize", {"clientInfo": {"name": "ganglia_delegate", "version": "1"},
                              "capabilities": {"experimentalApi": True}})
     rpc.send({"method": "initialized", "params": {}})
+
+
+def model_catalog(rpc: Rpc) -> list[dict]:
+    """Read a bounded catalog without creating a thread or inference turn."""
     # Inspect all catalog pages under a fixed bound. No assumption that the
     # configured model is visible on the first page, and no alias fallback.
     cursor = None
-    selected = None
+    entries = []
     for _ in range(10):
         page = rpc.call("model/list", {"limit": 100, "includeHidden": False, "cursor": cursor})
-        if not isinstance(page.get("data"), list):
+        if not isinstance(page.get("data"), list) or any(not isinstance(entry, dict) for entry in page["data"]):
             raise DelegationError("model catalog is malformed")
-        selected = next((entry for entry in page["data"] if isinstance(entry, dict) and entry.get("model") == route["model_id"]), None)
+        entries.extend(page["data"])
         cursor = page.get("nextCursor")
-        if selected or not cursor:
-            break
+        if cursor is None:
+            return entries
+        if not isinstance(cursor, str) or not cursor:
+            raise DelegationError("model catalog cursor is malformed")
+    raise DelegationError("model catalog exceeds the page budget")
+
+
+def available_models() -> list[dict]:
+    executable = shutil.which("codex")
+    if executable is None:
+        raise DelegationError("Codex CLI is unavailable")
+    with tempfile.TemporaryDirectory(prefix="ganglia-catalog-") as folder:
+        rpc = Rpc([executable, "app-server", "--stdio"], Path(folder), 25)
+        try:
+            initialize(rpc)
+            return [{"model_id": entry["model"],
+                     "efforts": [value["reasoningEffort"] for value in entry["supportedReasoningEfforts"]]}
+                    for entry in model_catalog(rpc)]
+        except (KeyError, TypeError, AttributeError) as exc:
+            raise DelegationError("model catalog is malformed") from exc
+        finally:
+            rpc.close()
+
+
+def run_turn(rpc: Rpc, payload: dict, route: dict, instructions: str, cwd: Path) -> dict:
+    initialize(rpc)
+    selected = next((entry for entry in model_catalog(rpc) if entry.get("model") == route["model_id"]), None)
     if selected is None:
         raise DelegationError("configured model is absent from the local provider catalog")
     efforts = {value.get("reasoningEffort") for value in selected.get("supportedReasoningEfforts", []) if isinstance(value, dict)}
@@ -151,9 +180,13 @@ def run_turn(rpc: Rpc, payload: dict, route: dict, instructions: str, cwd: Path)
         entries = current.get(section, {})
         if not isinstance(entries, dict):
             raise DelegationError("effective Codex tool configuration is malformed")
-        # Preserve arbitrary literal IDs (including dots) as TOML key segments.
-        for name in entries:
-            config[f"{section}.{json.dumps(name)}.enabled"] = False
+        # Thread config is JSON, not CLI TOML key syntax. Quoting a dotted
+        # segment creates a different server ID and loses its transport.
+        # Preserve literal IDs in nested objects and overlay only the flag.
+        # config/read's normalized null/default values are not round-trippable.
+        if any(not isinstance(settings, dict) for settings in entries.values()):
+            raise DelegationError("effective Codex tool configuration is malformed")
+        config[section] = {name: {"enabled": False} for name in entries}
     thread = rpc.call("thread/start", {"model": route["model_id"], "modelProvider": "openai",
         "allowProviderModelFallback": False, "ephemeral": True, "cwd": str(cwd),
         "sandbox": "read-only", "approvalPolicy": "never", "environments": [],
@@ -193,8 +226,10 @@ def run_turn(rpc: Rpc, payload: dict, route: dict, instructions: str, cwd: Path)
             observed_turn_ids.add(params["turnId"])
         if method == "thread/tokenUsage/updated":
             total = params.get("tokenUsage", {}).get("total", {})
-            if type(total.get("totalTokens")) is not int or total["totalTokens"] > route["max_worker_tokens"]:
-                raise DelegationError("worker token budget exceeded or usage missing")
+            if type(total.get("totalTokens")) is not int:
+                raise DelegationError("worker usage notification is missing an integer totalTokens")
+            if total["totalTokens"] > route["max_worker_tokens"]:
+                raise DelegationError(f"worker token budget exceeded: observed {total['totalTokens']}, limit {route['max_worker_tokens']}; no retry was made")
             usage = {"input_tokens": total.get("inputTokens"), "cached_input_tokens": total.get("cachedInputTokens"), "output_tokens": total.get("outputTokens")}
         elif method == "item/agentMessage/delta":
             delta_bytes += len(params.get("delta", "").encode())

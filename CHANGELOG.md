@@ -10,7 +10,10 @@ Notable changes to Ganglia are recorded here. This project follows
 
 - Added `bulk-reader` and `code-writer`, adapted from Spotify's shunt, with
   opt-in read-routing hooks, configurable worker models, line/byte limits,
-  worker failure diagnostics, and regression tests.
+  capability-sized starter profiles, line-numbered reader inputs,
+  readiness and worker failure diagnostics,
+  no-inference model discovery,
+  cross-repository setup guidance, and regression tests.
 - Added reproducible Python, JavaScript, and shell security checks with a
   pinned development environment and a read-only GitHub Actions workflow.
 

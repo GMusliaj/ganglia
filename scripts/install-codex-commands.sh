@@ -2,8 +2,9 @@
 set -euo pipefail
 
 BRAIN_ROOT="$(CDPATH='' cd -- "$(dirname -- "$0")/.." && pwd -P)"
-SKILL_HOME="${HOME}/.agents/skills"
-PROMPT_HOME="${CODEX_HOME:-${HOME}/.codex}/prompts"
+# Explicit destinations also support isolated installation tests and previews.
+SKILL_HOME="${GANGLIA_SKILL_DIR:-${HOME}/.agents/skills}"
+PROMPT_HOME="${GANGLIA_PROMPT_DIR:-${CODEX_HOME:-${HOME}/.codex}/prompts}"
 
 mkdir -p "$SKILL_HOME" "$PROMPT_HOME"
 
