@@ -58,6 +58,7 @@ def collect(root: Path, paths: list[Path]) -> list[Entry]:
                 path
                 for path in base.rglob("*.md")
                 if path.name not in GENERATED_NAMES and ".git" not in path.parts
+                and not path.is_relative_to(root / "local" / "raw")
             )
     entries = (entry_for(path, root) for path in files)
     return sorted(

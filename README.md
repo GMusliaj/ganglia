@@ -46,6 +46,7 @@ snippets/              reusable code and procedures
 sources/               source-grounded distillations
 infra/                 Ganglia architecture and operating infrastructure
 local/                 gitignored private and episodic memory
+  raw/                  private original revisions, provenance, and processing receipts
   notes/                durable personal notes
   projects/<name>/      engagement/project knowledge and checkpoints
   short-mem/            scratch and half-formed notes
@@ -73,6 +74,7 @@ surface and its machine-local state are deliberately different:
 | Portable knowledge | `patterns/`, `lessons/`, `decisions/`, `concepts/`, `snippets/`, `sources/`, `infra/` | Tracked and shareable |
 | Build and operating source | `bin/`, `scripts/`, `tests/`, `.agents/`, `docs/`, package manifests, `.mcp.json`, `.qmd/index.yml` | Tracked and shareable |
 | Generated public navigation | `MEMORY.md`, shared-folder `index.md` files | Tracked and regenerated from public entries |
+| Raw source archive | `local/raw/` originals, manifests, and receipts | Ignored; never commit or publish |
 | Private knowledge | `local/notes/`, `local/projects/`, checkpoints, session catalog, denylist | Ignored; never publish |
 | Disposable runtime output | `.qmd/` databases, `.tmp/` canvas, `bin/node_modules/`, caches and virtual environments | Ignored; rebuild locally |
 
@@ -126,6 +128,32 @@ Where this knowledge came from.
 Use file-relative Markdown links between entries. Never silently delete a
 superseded claim; move it under `## Superseded` with enough context to explain
 the change.
+
+## Raw sources
+
+Preserve original inputs separately from compiled knowledge through the
+remember-owned `bin/raw_sources.py` helper. Immutable, versioned records live
+under ignored `local/raw/`; `sources/` remains source-grounded distillations.
+Restricted originals stay with their protected provider and may be registered
+by opaque reference only. Local plaintext capture requires explicit consent.
+Raw sources are excluded from default indexing and are not learned knowledge
+until `$remember` compiles them. Capture preserves evidence; remember creates or
+updates knowledge and records its source revision.
+
+**Never commit raw sources, their metadata, or processing receipts.** The entire
+`local/` tree is ignored, with an explicit `/local/raw/` rule as well. Keep raw
+inputs in `local/raw/`, not the shared `sources/` folder. Ignore rules are not
+encryption: restricted originals remain in their protected provider.
+
+Verify the Git boundary from the repository root:
+
+```sh
+git check-ignore -v --no-index local/raw/example.json local/raw/example.bin
+git ls-files -- local/raw/
+```
+
+The first command must report an ignore rule; the second must return no files.
+See [raw source contract](docs/raw-sources.md).
 
 ## Materialized artifacts
 
@@ -327,7 +355,8 @@ Retrieval is tiered:
    shared knowledge unless local project context is more relevant.
 
 The checked-in `.qmd/index.yml` defines two local collections: `ganglia` spans
-the repository (including gitignored `local/`), while the excluded-by-default
+the repository (including private compiled knowledge under `local/`, but excluding
+`local/raw/`), while the excluded-by-default
 `codex-sessions` collection indexes compact private summaries generated from
 Codex JSONL history. `bin/sync_codex_sessions.py` refreshes those summaries
 under gitignored `local/session-catalog/`; raw transcripts are never copied

@@ -50,6 +50,18 @@ Match query terms and obvious stems against `title`, `description`, and `tags`
 frontmatter plus bodies. Search hidden/ignored `local/` explicitly when needed;
 do not assume a default `rg` traversal includes it.
 
+## 2a. Original-source requests
+
+`local/raw/` is a private source archive, not compiled knowledge. Exclude it from
+ordinary text-search traversals (`--glob '!local/raw/**'`) and default semantic
+retrieval. Only inspect it when the user asks for an original or when explicitly
+authorized source verification is needed. Follow provenance from a local entry
+and use `bin/raw_sources.py inspect --source <id> --revision <id>` before reading
+stored bytes. Restricted external references require the provider's unlock and
+processing authorization; absence of an adapter is a limitation, not permission
+to search for or decrypt the underlying file. Never write or index raw data during
+recall. Label an original as source evidence rather than compiled knowledge.
+
 ## 3. Merge and rank
 
 Union QMD and text-search hits and deduplicate by path. Rank:

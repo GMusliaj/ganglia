@@ -1,6 +1,9 @@
 # Private knowledge and machine-local identity. Nothing here is publishable.
 local/
 
+# Raw originals, private provenance, and processing receipts must never be committed.
+/local/raw/
+
 # Disposable Ganglia projections and local semantic indexes. Keep the portable
 # QMD collection definition, but never its database, models, or journals.
 .tmp/

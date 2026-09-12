@@ -185,6 +185,16 @@ HTML by default.
   `--no-open`, and inspect the live interface in a browser when that surface is
   available.
 
+## Raw source boundary
+
+`local/raw/` contains immutable private original-source records owned by the
+remember workflow, not OKF-lite knowledge. Keep it out of ordinary recall,
+generated indexes, and QMD. `sources/` continues to mean compiled distillations.
+Use `bin/raw_sources.py` for previewed capture/reference and processing receipts;
+never classify capture alone as completed remember ingestion. Restricted bytes
+stay in the authenticated source provider; reference metadata must be opaque.
+See `docs/raw-sources.md`. Shared promotion remains a separate human review.
+
 ## Remember contract
 
 - `/remember [lesson]` is the normal Ganglia write path and must use the installed
